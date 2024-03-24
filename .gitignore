@@ -1,0 +1,12 @@
+# All outputs
+build
+
+# Cache
+.cache
+
+# CMake-generated files
+CMakeFiles
+cmake_install.cmake
+CMakeCache.txt
+Makefile
+.cmake

@@ -1,0 +1,12 @@
+Checks: >
+    clang-diagnostic-*,
+    clang-analyzer-*,
+    concurrency-*,
+    performance-*,
+    cppcoreguidelines-*,
+    -concurrency-mt-unsafe,
+    -cppcoreguidelines-special-member-functions,
+    -cppcoreguidelines-avoid-magic-numbers,
+    -cppcoreguidelines-pro-type-reinterpret-cast,
+    -cppcoreguidelines-owning-memory,
+    -cppcoreguidelines-pro-type-vararg,
