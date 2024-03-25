@@ -5,6 +5,10 @@
 #include "makefile-builder.h"
 
 int main(int argc, char *argv[]) {
+    /* Enable line buffering for testing. */
+    setvbuf(stdout, NULL, _IOLBF, 0);
+    setvbuf(stderr, NULL, _IOLBF, 0);
+
     MakefileBuilder makefileBuilder;
     std::string makefilePath = "";
     int concurrency = 1;

@@ -1,0 +1,151 @@
+# Adapted from John Ousterhout
+# This file describes test cases for MiniMake, which are used by the
+# run_build_tests script. Each block of lines describes one test. The first
+# line is the command to invoke to run the test and the following lines
+# are the expected output. See the comments at the beginning of the
+# run_build_tests script for more information.
+
+./build/MiniMake -f tests/nameErr.mk
+!tests/nameErr.mk:2: *** empty variable name.  Stop.
+
+./build/MiniMake -f tests/nameErr2.mk
+!tests/nameErr2.mk:3: *** empty variable name.  Stop.
+
+./build/MiniMake -f tests/overrideErr.mk
+!tests/overrideErr.mk:7: warning: overriding recipe for target 'override'
+tests/overrideErr.mk:3: warning: ignoring old recipe for target 'override'
+
+./build/MiniMake -f tests/prereqVarErr.mk
+!tests/prereqVarErr.mk:2: *** unterminated variable reference.  Stop.
+
+./build/MiniMake -f tests/recipeFirstErr.mk
+!tests/recipeFirstErr.mk:2: *** recipe commences before first target.  Stop.
+
+./build/MiniMake -f tests/separatorErr.mk
+!tests/separatorErr.mk:2: *** missing separator.  Stop.
+
+./build/MiniMake -f tests/targetErr.mk
+!tests/targetErr.mk:3: *** missing target.  Stop.
+
+./build/MiniMake -f tests/test.mk basic
+echo Output from basic target
+Output from basic target
+
+./build/MiniMake -f tests/test.mk
+echo Output from basic target
+Output from basic target
+
+rm -f tests/basic2; ./build/MiniMake -f tests/test.mk tests/basic2; ./build/MiniMake -f tests/test.mk tests/basic2
+echo File contents > tests/basic2
+make: 'tests/basic2' is up to date.
+
+rm -f tests/deps*; ./build/MiniMake -f tests/test.mk tests/deps
+echo deps1 > tests/deps1
+echo deps3 > tests/deps3
+echo "New contents of deps3:" > tests/deps2
+cat tests/deps3 >> tests/deps2
+echo "Contents of deps1:" > tests/deps
+cat tests/deps1 >> tests/deps
+echo "Contents of deps2:" >> tests/deps
+cat tests/deps2 >> tests/deps
+
+./build/MiniMake -f tests/test.mk tests/deps > /dev/null; sleep 1; touch tests/deps3; ./build/MiniMake -f tests/test.mk tests/deps
+echo "New contents of deps3:" > tests/deps2
+cat tests/deps3 >> tests/deps2
+echo "Contents of deps1:" > tests/deps
+cat tests/deps1 >> tests/deps
+echo "Contents of deps2:" >> tests/deps
+cat tests/deps2 >> tests/deps
+
+./build/MiniMake -f tests/test.mk tests/deps > /dev/null; ./build/MiniMake -f tests/test.mk tests/deps
+make: 'tests/deps' is up to date.
+
+./build/MiniMake -f tests/test.mk var1
+echo abc def
+abc def
+
+./build/MiniMake -f tests/test.mk var2
+echo xxxabc defyyy
+xxxabc defyyy
+
+./build/MiniMake -f tests/test.mk var3
+echo xxxabc defyyy abc def
+xxxabc defyyy abc def
+
+./build/MiniMake -f tests/test.mk shortVarNames
+echo 111 xxx$xxx 222
+111 xxx 222
+
+./build/MiniMake -f tests/test.mk varDoesntExist
+echo --- ---
+--- ---
+
+./build/MiniMake -f tests/test.mk autoVars
+echo target: autoVars, first prereq: tests/deps1, all prereqs: tests/deps1 tests/deps2 tests/deps3
+target: autoVars, first prereq: tests/deps1, all prereqs: tests/deps1 tests/deps2 tests/deps3
+
+./build/MiniMake -f tests/test.mk expandVarName
+echo Value of name1
+Value of name1
+
+./build/MiniMake -f tests/test.mk recursive
+!tests/test.mk:64: *** Recursive variable 'VAR6' references itself (eventually).  Stop.
+
+./build/MiniMake -f tests/test.mk expPrereqs
+echo building prereq1
+building prereq1
+echo building prereq2
+building prereq2
+echo building prereq3
+building prereq3
+
+./build/MiniMake -f tests/test.mk expTargets
+echo building prereq1
+building prereq1
+
+./build/MiniMake -f tests/test.mk expRecipes1 expRecipes2
+echo Target is expRecipes1
+Target is expRecipes1
+echo Target is expRecipes2
+Target is expRecipes2
+
+./build/MiniMake -f tests/test.mk fail
+!make: *** [tests/test.mk:101: fail] Error 22
+
+./build/MiniMake -f tests/test.mk badvar
+!tests/test.mk:107: *** unterminated variable reference.  Stop.
+
+./build/MiniMake -f tests/test.mk badvar2
+!tests/test.mk:105: *** unterminated variable reference.  Stop.
+
+./build/MiniMake -f tests/test.mk parallel
+for x in a b c; do sleep 1; echo p1$x; done
+p1a
+p1b
+p1c
+for x in a b c; do sleep 1.5; echo p2$x; done
+p2a
+p2b
+p2c
+for x in a b c; do sleep 0.5; echo p3$x; done
+p3a
+p3b
+p3c
+
+./build/MiniMake -f tests/test.mk -j 10 parallel
+for x in a b c; do sleep 1; echo p1$x; done
+for x in a b c; do sleep 1.5; echo p2$x; done
+for x in a b c; do sleep 0.5; echo p3$x; done
+p3a
+p1a
+p3b
+p2a
+p3c
+p1b
+p2b
+p1c
+p2c
+
+./build/MiniMake -f tests/comment.mk all
+echo "Output for 'all' target"
+Output for 'all' target
