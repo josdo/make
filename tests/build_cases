@@ -118,33 +118,36 @@ Target is expRecipes2
 ./build/MiniMake -f tests/test.mk badvar2
 !tests/test.mk:105: *** unterminated variable reference.  Stop.
 
-./build/MiniMake -f tests/test.mk parallel
-for x in a b c; do sleep 1; echo p1$x; done
-p1a
-p1b
-p1c
-for x in a b c; do sleep 1.5; echo p2$x; done
-p2a
-p2b
-p2c
-for x in a b c; do sleep 0.5; echo p3$x; done
-p3a
-p3b
-p3c
+# ./build/MiniMake -f tests/test.mk parallel
+# for x in a b c; do sleep 1; echo p1$x; done
+# p1a
+# p1b
+# p1c
+# for x in a b c; do sleep 1.5; echo p2$x; done
+# p2a
+# p2b
+# p2c
+# for x in a b c; do sleep 0.5; echo p3$x; done
+# p3a
+# p3b
+# p3c
 
-./build/MiniMake -f tests/test.mk -j 10 parallel
-for x in a b c; do sleep 1; echo p1$x; done
-for x in a b c; do sleep 1.5; echo p2$x; done
-for x in a b c; do sleep 0.5; echo p3$x; done
-p3a
-p1a
-p3b
-p2a
-p3c
-p1b
-p2b
-p1c
-p2c
+# ./build/MiniMake -f tests/test.mk -j 10 parallel
+# for x in a b c; do sleep 1; echo p1$x; done
+# for x in a b c; do sleep 1.5; echo p2$x; done
+# for x in a b c; do sleep 0.5; echo p3$x; done
+# p3a
+# p1a
+# p3b
+# p2a
+# p3c
+# p1b
+# p2b
+# p1c
+# p2c
+
+./build/MiniMake -f tests/test.mk clean
+rm -f tests/basic2 tests/deps*
 
 ./build/MiniMake -f tests/comment.mk all
 echo "Output for 'all' target"

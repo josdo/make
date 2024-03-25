@@ -60,6 +60,14 @@ TEST(MakefileParser, getRecipes_getPrereqs) {
     EXPECT_TRUE(exceptionThrown);
 }
 
+TEST(MakefileParser, identifyLineMisc) {
+    MakefileParser parser("tests/empty.mk");
+    MakefileParser::LineType t;
+
+    std::tie(t, std::ignore) = parser.identifyLine("\t# comment", false);
+    EXPECT_EQ(t, MakefileParser::NOOP);
+}
+
 TEST(MakefileParser, identifyLineWhitespace) {
     /* test on whitespace */
     MakefileParser parser("tests/empty.mk");

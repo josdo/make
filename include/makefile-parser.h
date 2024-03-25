@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "exception.h"
+/* TODO remove LOG. */
 // #define LOG
 
 /**
@@ -24,6 +25,7 @@ class MakefileParser {
        public:
         MakefileParserException(std::vector<std::string> v)
             : PrintfException(v.at(0).c_str()) {}
+        /* TODO: cleanly print exceptions. */
         // MakefileParserException(const char* format, ...)
         //     : PrintfException(format, std::forward<decltype(format)>(format))
         //     {}

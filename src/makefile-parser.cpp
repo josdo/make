@@ -34,9 +34,12 @@ MakefileParser::MakefileParser(std::string makefilePath)
     makefileVariableValues = {{"$", "$"}};
 
     std::string line;
+    /* TODO: merge identifyLine into this method. */
     LineType lineType = NOOP;
     size_t lineno = 0;
+    /* TODO: group all target info together. */
     std::vector<std::string> ruleTargets;
+    /* TODO: try to get rid of this. */
     bool isFirstRecipe =
         false;  // True if this is the first recipe for a given ruleTarget
     while (std::getline(makefile, line)) {
@@ -542,16 +545,17 @@ std::tuple<MakefileParser::LineType, std::string> MakefileParser::identifyLine(
     std::string line, bool inRule) {
     bool startsWithTab = line.starts_with('\t');
 
-    /* Remove leading whitespace or tabs. TODO: use trim()? */
-    size_t firstNonWhitespacePos = line.find_first_not_of(" \t");
-    if (firstNonWhitespacePos != std::string::npos) {
-        line.erase(0, firstNonWhitespacePos);
-    } else {
-        line.erase();
+    /* Remove anything from # onwards first. */
+    size_t hashPos = line.find('#');
+    if (hashPos != std::string::npos) {
+        line.erase(hashPos);
     }
 
-    /* Look for recipe if tabbed. Ignore tabbed blankspace. */
+    /* Remove leading whitespace or tabs. */
+    line = trim(line);
     if (line.empty()) return {NOOP, line};
+
+    /* Look for recipe. */
     if (startsWithTab) {
         if (inRule) {
             return {RECIPE, line};
@@ -560,44 +564,32 @@ std::tuple<MakefileParser::LineType, std::string> MakefileParser::identifyLine(
         }
     }
 
-    /* Remove anything from # onwards first. Look for a no-op. */
-    size_t hashPos = line.find('#');
-    if (hashPos != std::string::npos) {
-        line.erase(hashPos);
-    }
-    if (line.empty()) return {NOOP, line};
-
-    /* Look for a variable or rule.*/
+    /* Look for a variable or rule. */
     size_t equalPos = line.find('=');
     size_t colonPos = line.find(':');
-    if ((equalPos != std::string::npos) && (colonPos != std::string::npos)) {
-        assert(equalPos != colonPos);
-        if (equalPos < colonPos) {
-            return {VARIABLE, line};
-        }
-        return {RULE, line};
-    } else if (equalPos != std::string::npos) {
+    if (equalPos < colonPos) {
         return {VARIABLE, line};
-    } else if (colonPos != std::string::npos) {
+    } else if (colonPos < equalPos) {
         return {RULE, line};
+    } else {
+        /* If equal and colon in the same position, they must both be npos and
+         * thus not present. */
+        return {INVALID, "missing separator"};
     }
-
-    /* Found unknown. */
-    return {INVALID, "missing separator"};
 }
 
 /**
- * @brief Trim the leading and trailing whitespace off, preserving any
- * whitespace in between.
+ * @brief Trim the leading and trailing whitespace and tabspace off, preserving
+ * any whitespace in between.
  *
  */
 std::string MakefileParser::trim(const std::string& str) {
-    size_t first = str.find_first_not_of(' ');
+    size_t first = str.find_first_not_of(" \t");
     if (std::string::npos == first) {
         /* Entire string is whitespace. */
         return "";
     }
-    size_t last = str.find_last_not_of(' ');
+    size_t last = str.find_last_not_of(" \t");
     return str.substr(first, (last - first + 1));
 }
 

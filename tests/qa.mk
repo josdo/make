@@ -275,3 +275,9 @@ special-vars:
 # # How are tabbed non-recipes handled?
 # notarecipe= # needed to ensure not continuing in the context of the prior rule
 # 	not a recipe
+
+# Can hashtag be assigned to a variable?
+# A: no
+hashtag = #
+hash_target:
+	echo $(hashtag)
