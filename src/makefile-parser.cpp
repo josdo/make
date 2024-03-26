@@ -4,10 +4,8 @@
 
 #include <algorithm>
 #include <cassert>
-#include <deque>
 #include <filesystem>
 #include <fstream>
-#include <iomanip>
 #include <iostream>
 #include <numeric>
 #include <queue>
@@ -18,13 +16,15 @@
 #include "variables.h"
 
 /**
- * @brief Parses the makefile to find the recipes and prerequisites for every
- * target. Throws an error for
- *      - unopenable file
+ * @brief Finds each target's recipes and prerequisites. Throws an error for
+ *      - an unopenable file
  *      - incorrect syntax
- *      - variable "loop" (variable defined by its own name)
- *      - rule "loop" (target is a prereq for one of its prereqs)
- *      - defining two different sets of recipes for the same target
+ *      - a variable or any of its dependencies is defined in terms of itself
+ *      - a variable with no name
+ *      - a target that depends on itself
+ *      - a rule with no targets
+ *
+ * Allows redefinition of variables and a target's recipes.
  *
  */
 MakefileParser::MakefileParser(std::string makefilePath)
@@ -35,16 +35,16 @@ MakefileParser::MakefileParser(std::string makefilePath)
                                       makefilePath.c_str());
     }
 
-    /* This is our one default variable mapping. */
+    /* Hardcode a special case variable. */
     makefileVars.addVariable("$", "$", 0);
 
     std::string line;
     size_t lineno = 0;
-    /* The targets of the rule that is currently in scope, and if that's
-     * nonempty, the line number the rule was defined at. */
-    /* TODO: group all target info together. */
-    std::vector<std::string> activeTargets;
-    size_t activeLineno = 0;
+
+    /* The targets and line number of the rule definition we are currently
+     * inside. When there are no targets, we are not in a rule definition. */
+    std::vector<std::string> definedTargets;
+    size_t definedLineno = 0;
     while (std::getline(makefile, line)) {
         lineno++;
 
@@ -54,10 +54,8 @@ MakefileParser::MakefileParser(std::string makefilePath)
             line.erase(hashPos);
         }
 
-        /* Identify the line type. Order matters. Tabbed whitespace should be
-         * ignored. Tabbed nonwhitespace may contain a variable or rule
-         * separator, but will be treated as a recipe. Thus, evaluation is first
-         * no-op, then recipe, then variable or rule. */
+        /* Identify the line type. Order matters. Tabs are evaluated before
+         * separators. A blank line is checked before anything else. */
         bool isRecipe = line.starts_with('\t');
         size_t equalPos = line.find('=');
         size_t colonPos = line.find(':');
@@ -69,17 +67,16 @@ MakefileParser::MakefileParser(std::string makefilePath)
         if (isNoOp) {
             continue;
         } else if (isRecipe) {
-            if (activeTargets.empty()) {
+            if (definedTargets.empty()) {
                 throw MakefileParserException(
                     "%s:%d: *** recipe commences before first target.  Stop.",
                     makefilePath.c_str(), lineno);
             } else {
-                /* Assign each target this recipe. */
-                std::string recipe = line;
-                for (const std::string& target : activeTargets) {
+                /* Assign recipe to each target. */
+                for (const std::string& target : definedTargets) {
                     /* Override any recipes defined in a prior rule. */
                     if (!makefileRecipeLinenos[target].empty() &&
-                        makefileRecipeLinenos[target].at(0) < activeLineno) {
+                        makefileRecipeLinenos[target].at(0) < definedLineno) {
                         std::cerr << makefilePath << ":"
                                   << std::to_string(lineno) << ":"
                                   << " warning: overriding recipe for target '"
@@ -95,15 +92,14 @@ MakefileParser::MakefileParser(std::string makefilePath)
                         makefileRecipeLinenos.clear();
                     }
 
-                    makefileRecipes[target].push_back(recipe);
+                    makefileRecipes[target].push_back(line);
                     makefileRecipeLinenos[target].push_back(lineno);
                 }
             }
         } else if (isVariable) {
-            /* Indicate no longer in a rule. */
-            activeTargets.clear();
+            definedTargets.clear();
 
-            /* Resolve variable name. Strip off whitespace for consistency. */
+            /* Expand variables in the variable's name. */
             size_t equalPos = line.find('=');
             assert(equalPos != std::string::npos);
             std::string varName = line.substr(0, equalPos);
@@ -115,20 +111,19 @@ MakefileParser::MakefileParser(std::string makefilePath)
             }
             varName = StringOps::trim(varName);
 
-            /* Disallow an empty variable name. */
+            /* Error on an empty variable name. */
             if (varName.empty()) {
                 throw MakefileParserException(
                     "%s:%d: *** empty variable name.  Stop.",
                     makefilePath.c_str(), lineno);
             }
 
-            /* Map variable value to the resolved name. */
+            /* Assign value to the variable name. */
             std::string varValue = StringOps::trim(line.substr(equalPos + 1));
             makefileVars.addVariable(varName, varValue, lineno);
         } else if (isRule) {
-            /* Resolve rule definition. Resolve targets and prereqs separately
-             * since cannot guarantee where the colon will end up after
-             * resolution or whether a target name will contain a colon. */
+            /* Expand variables in the rule. Expansion may introduce a colon, so
+             * colon-separate targets from prerequisites first. */
             size_t colonPos = line.find(':');
             assert(colonPos != std::string::npos);
             std::string targetString;
@@ -143,27 +138,26 @@ MakefileParser::MakefileParser(std::string makefilePath)
                                               e.what());
             }
 
-            activeTargets = StringOps::split(targetString, ' ');
-            activeLineno = lineno;
+            definedTargets = StringOps::split(targetString, ' ');
+            definedLineno = lineno;
 
-            /* Disallow an empty set of targets. */
-            if (activeTargets.empty()) {
+            /* Error on an empty set of targets. */
+            if (definedTargets.empty()) {
                 throw MakefileParserException(
                     "%s:%d: *** missing target.  Stop.", makefilePath.c_str(),
                     lineno);
             }
 
-            /* Map target to all its prereqs (even empty prereqs) and store as
-             * the new rule context. */
+            /* Assign prereqs to each target. */
             std::vector<std::string> newPrereqs =
                 StringOps::split(prereqString, ' ');
 
-            for (const std::string& target : activeTargets) {
+            for (const std::string& target : definedTargets) {
                 for (const std::string& newPrereq : newPrereqs) {
                     makefilePrereqs[target].push_back(newPrereq);
                 }
 
-                /* Remove any duplicate prereqs. */
+                /* Do not duplicate any prereqs. */
                 std::sort(makefilePrereqs[target].begin(),
                           makefilePrereqs[target].end());
                 makefilePrereqs[target].erase(
@@ -172,13 +166,13 @@ MakefileParser::MakefileParser(std::string makefilePath)
                     makefilePrereqs[target].end());
             }
 
-            /* If this was the first rule seen, remember its targets. */
+            /* Remember the targets of the first rule defined in the file. */
             if (firstTargets.empty()) {
-                firstTargets = activeTargets;
+                firstTargets = definedTargets;
             }
         } else {
-            /* If equal and colon in the same position, they must both be npos
-             * and thus not present. */
+            /* Arrive here if `=` and `:` were found to have the same position,
+             * which means both were std::string::npos and thus not found. */
             throw MakefileParserException(
                 "%s:%d: *** missing separator.  Stop.", makefilePath.c_str(),
                 lineno);
@@ -188,21 +182,22 @@ MakefileParser::MakefileParser(std::string makefilePath)
     makefile.close();
 }
 
-// Return the recipes for a target and the line numbers they were defined at.
-// Return nothing if target does not exist or has no recipes. Throws error if
-// recipe invalid.
+/**
+ * @brief Returns a target's recipes and recipe line numbers, expanding any
+ * recipe variables first, including automatic variables. If no target exists,
+ * nothing is returned. Throws an error if variable expansion fails.
+ *
+ */
 std::tuple<std::vector<std::string>, std::vector<size_t>>
-MakefileParser::getRecipes(std::string target) {
-    /* Lookup recipes. */
-    std::vector<std::string> subbedRecipes;
-    auto keyValue = makefileRecipes.find(target);
-    if (keyValue == makefileRecipes.end()) {
+MakefileParser::getRecipes(const std::string& target) {
+    /* Lookup target. */
+    if (!makefileRecipes.contains(target)) {
         return {};
     }
-    std::vector<std::string> originalRecipes = keyValue->second;
-    std::vector<size_t> linenos = makefileRecipeLinenos[target];
+    std::vector<std::string> savedRecipes = makefileRecipes[target];
+    std::vector<size_t> recipeLinenos = makefileRecipeLinenos[target];
 
-    /* Introduce automatic variables to substitution map. */
+    /* Create automatic variables. */
     Variables autovars = makefileVars;
     autovars.addVariable("@", target, 0);
     std::vector<std::string> prereqs = makefilePrereqs[target];
@@ -219,43 +214,46 @@ MakefileParser::getRecipes(std::string target) {
     }
 
     /* Expand variables in each recipe. */
-    for (size_t i = 0; i < originalRecipes.size(); i++) {
-        std::string subbedRecipe;
+    std::vector<std::string> expandedRecipes;
+    for (size_t i = 0; i < savedRecipes.size(); i++) {
+        std::string expandedRecipe;
         try {
-            subbedRecipe =
-                autovars.expandVariables(originalRecipes.at(i), linenos.at(i));
+            expandedRecipe = autovars.expandVariables(savedRecipes.at(i),
+                                                      recipeLinenos.at(i));
         } catch (const Variables::VariablesException& e) {
             throw MakefileParserException("%s:%s", makefilePath.c_str(),
                                           e.what());
         }
-        subbedRecipes.push_back(subbedRecipe);
+        expandedRecipes.push_back(expandedRecipe);
     }
 
-    assert(subbedRecipes.size() == linenos.size());
-    return {subbedRecipes, linenos};
+    assert(expandedRecipes.size() == recipeLinenos.size());
+    return {expandedRecipes, recipeLinenos};
 }
 
-// Returns the prerequisites for a target. Throws error if target not found,
-// a circular dependency exists, or a rule not found for a prerequisite.
-std::vector<std::string> MakefileParser::getPrereqs(std::string target) {
-    /* Lookup prereqs. */
-    auto it = makefilePrereqs.find(target);
-    if (it == makefilePrereqs.end()) {
+/**
+ * @brief Return a target's prerequisites. Throw error if the target is not
+ * defined, the target depends on itself, or a prerequisite is not defined.
+ *
+ */
+std::vector<std::string> MakefileParser::getPrereqs(const std::string& target) {
+    /* Throw error if target not defined. */
+    if (!makefilePrereqs.contains(target)) {
         throw MakefileParserException(
             "make: *** No rule to make target '%s'. Stop.", target.c_str());
     }
-    std::vector<std::string> prereqs = makefilePrereqs[target];
 
-    /* Throw error if prereq not defined by a rule. */
+    /* Throw error if a prereq is not defined. */
+    std::vector<std::string> prereqs = makefilePrereqs[target];
     for (const std::string& prereq : prereqs) {
-        if (makefilePrereqs.find(prereq) == makefilePrereqs.end()) {
+        if (!makefilePrereqs.contains(prereq)) {
             throw MakefileParserException(
                 "make: *** No rule to make target '%s', needed by '%s'. Stop.",
                 prereq.c_str(), target.c_str());
         }
     }
 
-    /* Throw error if any circular dependency. */
+    /* Throw error if target depends on itself. */
     if (hasCircularDependency(target)) {
         throw MakefileParserException("Circular dependency for target %s",
                                       target.c_str());
@@ -265,46 +263,46 @@ std::vector<std::string> MakefileParser::getPrereqs(std::string target) {
 }
 
 /**
- * @brief Returns true if the target satisfies any of the following
- * conditions:
- * 1. No file exists named target.
- * 2. No files exists named a prerequisite of the target.
- * 3. A prerequisite file has a last-modified time later than that of the
- *    target.
- * 4. Error getting the file status.
+ * @brief Returns true if the target is outdated by satisfying any of the
+ * following criteria:
+ * 1. No file corresponds to the target.
+ * 2. No file corresponds to a prerequisite of the target.
+ * 3. A file corresponding to a prerequisite has been last-modified later than
+ *    the target.
+ * 4. There's an error getting a file status.
  *
  */
-bool MakefileParser::outdated(std::string target) {
+bool MakefileParser::outdated(const std::string& target) {
+    /* Lookup target file. */
     if (!std::filesystem::exists(target)) {
-        /* Found a file named target. */
         return true;
     }
 
+    /* Lookup target file's modified time */
     struct stat targetStat;
     if (stat(target.c_str(), &targetStat) != 0) {
-        /* Could not get the target file's mod time. */
         return true;
     }
     timespec targetModTime = targetStat.st_mtim;
 
     for (const std::string& prereq : makefilePrereqs[target]) {
+        /* Lookup prereq file. */
         if (!std::filesystem::exists(prereq)) {
-            /* Found a file named prereq. */
             return true;
         }
 
+        /* Compare prereq file's last modified time to the target file's. */
         struct stat prereqStat;
         if (stat(prereq.c_str(), &prereqStat) != 0) {
-            /* Could not get the prereq file's mod time. */
             return true;
         }
         timespec prereqModTime = prereqStat.st_mtim;
 
-        bool prereqNewer = (prereqModTime.tv_sec > targetModTime.tv_sec) ||
-                           (prereqModTime.tv_sec == targetModTime.tv_sec &&
-                            prereqModTime.tv_nsec > targetModTime.tv_nsec);
-        if (prereqNewer) {
-            /* Prereq file modified more recently than target's file. */
+        bool prereqModifiedLater =
+            (prereqModTime.tv_sec > targetModTime.tv_sec) ||
+            (prereqModTime.tv_sec == targetModTime.tv_sec &&
+             prereqModTime.tv_nsec > targetModTime.tv_nsec);
+        if (prereqModifiedLater) {
             return true;
         }
     }
@@ -313,15 +311,19 @@ bool MakefileParser::outdated(std::string target) {
 }
 
 /**
- * @brief Return the targets of the first rule in the makefile. Return an empty
- * vector if the makefile has no rules.
- *
+ * @brief Return the targets of the first rule defined in the makefile. Empty if
+ * no rules are defined.
  */
 std::vector<std::string> MakefileParser::getFirstTargets() {
     return firstTargets;
 }
 
-bool MakefileParser::hasCircularDependency(std::string target) {
+/**
+ * @brief Returns true if the target or any of its dependencies depends on
+ * itself.
+ *
+ */
+bool MakefileParser::hasCircularDependency(const std::string& target) {
     std::set<std::string> visitedTargets;
     std::queue<std::string> queue;
 
@@ -330,25 +332,16 @@ bool MakefileParser::hasCircularDependency(std::string target) {
     while (!queue.empty()) {
         std::string currentTarget = queue.front();
         queue.pop();
-
-        /* Indicate this target is visited. */
         visitedTargets.insert(currentTarget);
 
-        /* Lookup its prereqs. If a target does not exist, it is treated like a
-         * target with no prereqs. */
-        std::vector<std::string> prereqs = {};
-        if (makefilePrereqs.find(currentTarget) != makefilePrereqs.end()) {
-            prereqs = makefilePrereqs[currentTarget];
-        }
-
-        for (const std::string& visitor : prereqs) {
-            /* See if we visited this prereq as a target already. If so, this is
-             * a loop. */
-            if (visitedTargets.find(visitor) != visitedTargets.end()) {
+        for (const std::string& visitor : makefilePrereqs[currentTarget]) {
+            /* If this prereq was already visited, it is a circular dependency.
+             */
+            if (visitedTargets.contains(visitor)) {
                 return true;
             }
 
-            /* Add prereqs of this prereq to the queue. */
+            /* Visit this target's prereqs next. */
             queue.push(visitor);
         }
     }

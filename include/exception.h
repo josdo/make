@@ -5,6 +5,10 @@
 #include <cstdio>
 #include <string>
 
+/**
+ * @brief Exception class that supports printf-formatted errors.
+ *
+ */
 class PrintfException : public std::exception {
    public:
     PrintfException(const char* format, ...) : _msg() {
