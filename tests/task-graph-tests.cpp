@@ -8,28 +8,26 @@ auto printTask = [](const std::string& task) {
 };
 
 TEST(TaskGraph, run_simple) {
-    TaskGraph tree;
     std::vector<TaskGraph::Task> tasks;
     auto failedTask = [](std::string) { return false; };
 
     std::cout << "****** NEW RUN ******\n";
-    EXPECT_TRUE(tree.run(tasks, 1));
+    EXPECT_TRUE(TaskGraph::run(tasks, 1));
 
     std::cout << "****** NEW RUN ******\n";
     tasks = {{"fail", {}, failedTask}};
-    EXPECT_FALSE(tree.run(tasks, 1));
+    EXPECT_FALSE(TaskGraph::run(tasks, 1));
 
     std::cout << "****** NEW RUN ******\n";
     tasks = {{"1", {"2"}, printTask}, {"2", {"3"}, printTask}};
-    EXPECT_TRUE(tree.run(tasks, 1));
+    EXPECT_TRUE(TaskGraph::run(tasks, 1));
 
     std::cout << "****** NEW RUN ******\n";
     tasks = {{"1", {"2"}, printTask}, {"2", {"1"}, printTask}};
-    EXPECT_FALSE(tree.run(tasks, 1));
+    EXPECT_FALSE(TaskGraph::run(tasks, 1));
 }
 
 TEST(TaskGraph, run_tree) {
-    TaskGraph tree;
     std::vector<TaskGraph::Task> tasks;
 
     /* Task tree. Expect 3s in any order, then 2, then 1
@@ -45,17 +43,16 @@ TEST(TaskGraph, run_tree) {
              {"3c", {}, printTask},
              {"2", {"3a", "3b"}, printTask},
              {"1", {"3c", "2"}, printTask}};
-    EXPECT_TRUE(tree.run(tasks, 1));
+    EXPECT_TRUE(TaskGraph::run(tasks, 1));
 
     std::cout << "****** NEW RUN ******\n";
-    EXPECT_TRUE(tree.run(tasks, 3));
+    EXPECT_TRUE(TaskGraph::run(tasks, 3));
 
     std::cout << "****** NEW RUN ******\n";
-    EXPECT_TRUE(tree.run(tasks, 10));
+    EXPECT_TRUE(TaskGraph::run(tasks, 10));
 }
 
 TEST(TaskGraph, run_graph1) {
-    TaskGraph tree;
     std::vector<TaskGraph::Task> tasks;
 
     /* Same as tree except 3b comes before 3c
@@ -71,17 +68,16 @@ TEST(TaskGraph, run_graph1) {
              {"3c", {"3b"}, printTask},
              {"2", {"3a", "3b"}, printTask},
              {"1", {"3c", "2"}, printTask}};
-    EXPECT_TRUE(tree.run(tasks, 1));
+    EXPECT_TRUE(TaskGraph::run(tasks, 1));
 
     std::cout << "****** NEW RUN ******\n";
-    EXPECT_TRUE(tree.run(tasks, 3));
+    EXPECT_TRUE(TaskGraph::run(tasks, 3));
 
     std::cout << "****** NEW RUN ******\n";
-    EXPECT_TRUE(tree.run(tasks, 10));
+    EXPECT_TRUE(TaskGraph::run(tasks, 10));
 }
 
 TEST(TaskGraph, run_graph2) {
-    TaskGraph tree;
     std::vector<TaskGraph::Task> tasks;
 
     /* Expect 3, then 2s, then 1s.
@@ -97,11 +93,11 @@ TEST(TaskGraph, run_graph2) {
         {"2b", {"3"}, printTask},  {"1a", {"2a", "2b"}, printTask},
         {"1b", {"2b"}, printTask},
     };
-    EXPECT_TRUE(tree.run(tasks, 1));
+    EXPECT_TRUE(TaskGraph::run(tasks, 1));
 
     std::cout << "****** NEW RUN ******\n";
-    EXPECT_TRUE(tree.run(tasks, 3));
+    EXPECT_TRUE(TaskGraph::run(tasks, 3));
 
     std::cout << "****** NEW RUN ******\n";
-    EXPECT_TRUE(tree.run(tasks, 10));
+    EXPECT_TRUE(TaskGraph::run(tasks, 10));
 }

@@ -9,7 +9,6 @@ int main(int argc, char *argv[]) {
     setvbuf(stdout, NULL, _IOLBF, 0);
     setvbuf(stderr, NULL, _IOLBF, 0);
 
-    MakefileBuilder makefileBuilder;
     std::string makefilePath = "";
     int concurrency = 1;
     std::vector<std::string> targets;
@@ -35,7 +34,7 @@ int main(int argc, char *argv[]) {
         targets.push_back(argv[i]);
     }
 
-    makefileBuilder.build(makefilePath, targets, concurrency);
+    MakefileBuilder::build(makefilePath, targets, concurrency);
 
     return 0;
 }

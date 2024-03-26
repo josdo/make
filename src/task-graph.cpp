@@ -8,6 +8,8 @@
 #include <set>
 #include <string>
 
+namespace TaskGraph {
+
 /**
  * @brief Run each task after its parents. Independent tasks will be run
  * concurrently.
@@ -16,7 +18,7 @@
  * @return false Some tasks could not run due to circular dependency, or a task
  * ran but returned failure.
  */
-bool TaskGraph::run(std::vector<Task> tasks, int numThreads) {
+bool run(std::vector<Task> tasks, int numThreads) {
     /* SCHEDULE TASKS. */
     /* For each task, this stores the number of parent tasks that still need to
      * be run before it can be run. */
@@ -165,3 +167,5 @@ bool TaskGraph::run(std::vector<Task> tasks, int numThreads) {
     }
     return runnedAll;
 }
+
+}  // namespace TaskGraph

@@ -11,9 +11,10 @@
 #include "makefile-parser.h"
 #include "task-graph.h"
 
-void MakefileBuilder::build(const std::string& makefilePath,
-                            std::vector<std::string> targets,
-                            const size_t numJobs) {
+namespace MakefileBuilder {
+
+void build(const std::string& makefilePath, std::vector<std::string> targets,
+           const size_t numJobs) {
     /* Parse. Catch any error and print with formatting. */
     std::shared_ptr<MakefileParser> parser;
     try {
@@ -29,7 +30,6 @@ void MakefileBuilder::build(const std::string& makefilePath,
     }
 
     /* Create task tree for each target. */
-    TaskGraph taskGraph;
     for (const std::string& currTarget : targets) {
         /* Create tasks. */
         std::deque<std::string> taskify = {currTarget};
@@ -111,9 +111,11 @@ void MakefileBuilder::build(const std::string& makefilePath,
         }
 
         /* Run build tasks. If failure, do not continue to the next target. */
-        bool success = taskGraph.run(tasks, numJobs);
+        bool success = TaskGraph::run(tasks, numJobs);
         if (!success) {
             return;
         }
     }
 }
+
+}  // namespace MakefileBuilder
