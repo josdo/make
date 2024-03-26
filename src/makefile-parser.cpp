@@ -337,65 +337,13 @@ std::vector<std::string> MakefileParser::getFirstTargets() {
  * whitespace.
  * TODO: rename method, it does formatting too.
  *
- * $<space> or $<EOL> will return as a variable with an empty substring.
+ * $<space> will return as "" and $<EOL> will return as "$".
  *
  * @return std::vector<std::tuple<std::string, bool>> Each element is a
  * substring and 0 if not a variable, 1 if a variable, or -1 if an
  * unterminated variable reference. If -1, the substring is the error
  * message.
  */
-std::vector<std::tuple<std::string, int>> MakefileParser::getVariables(
-    std::string input) {
-    std::vector<std::tuple<std::string, int>> substrings;
-    std::string remainder = input;
-    while (!remainder.empty()) {
-        /* Find start of next variable. The substring before it is not a
-         * variable. */
-        size_t dollarPos = remainder.find('$');
-        if (dollarPos == std::string::npos) {
-            substrings.push_back({remainder, 0});
-            remainder = "";
-            continue;
-        }
-        if (dollarPos > 0) {
-            substrings.push_back({remainder.substr(0, dollarPos), 0});
-        }
-        remainder = remainder.substr(dollarPos + 1);
-
-        /* Find the end of the variable. */
-        if (remainder.starts_with('(')) {
-            /* Parentheses-enclosed variable. */
-            size_t endParen = remainder.find(')');
-            if (endParen == std::string::npos) {
-                /* No closing parenthesis means this is an invalid variable
-                 * reference. */
-                substrings.push_back({"unterminated variable reference", -1});
-                remainder = "";
-                continue;
-            } else {
-                /* Do not include the parentheses in the returned
-                 * substring. */
-                substrings.push_back({remainder.substr(1, endParen - 1), 1});
-                remainder = remainder.substr(endParen + 1);
-            }
-        } else {
-            /* Single character variable. */
-            bool isSpace =
-                remainder.starts_with(' ') || remainder.starts_with('\t');
-            bool isEOL = remainder.empty();
-            if (isSpace) {
-                substrings.push_back({"", 1});
-            } else if (isEOL) {
-                /* TODO: is this a variable or not? */
-                substrings.push_back({"$", 0});
-            } else {
-                substrings.push_back({remainder.substr(0, 1), 1});
-                remainder = remainder.substr(1);
-            }
-        }
-    }
-    return substrings;
-}
 
 /**
  * @brief Substitute each variable in the input string with its value if
@@ -415,67 +363,75 @@ std::tuple<std::string, bool> MakefileParser::substituteVariables(
     std::map<std::string, size_t>& variableLinenos,
     std::set<std::string>& seenVariables) {
     std::string output = "";
+    std::string remainingInput = input;
+    while (!remainingInput.empty()) {
+        /* Go to the next variable. */
+        size_t dollarPos = remainingInput.find('$');
+        output += remainingInput.substr(0, dollarPos);
+        if (dollarPos == std::string::npos) {
+            /* The entire input has been went through. */
+            break;
+        }
 
-    for (auto [substring, status] : getVariables(input)) {
-        if (status == -1) {
-            /* Failure in getVariables. There is no recursion in getVariables,
-             * so our current input is the cause of the problem. Thus report the
-             * lineno of this input. */
-            std::string errorMessage = makefilePath + ":" +
-                                       std::to_string(inputLineno) + ": *** " +
-                                       substring + ".  Stop.";
-            return {errorMessage, false};
-        } else if (status == 1) {
-            /* If this substring isn't a variable, it evaluates to an empty
-             * string, so it can be skipped without modifying the output. */
-            if (subValues.find(substring) == subValues.end()) {
-                continue;
+        /* Handle $ at the end of a line. */
+        remainingInput = remainingInput.substr(dollarPos + 1);
+        if (remainingInput.empty()) {
+            output += "$";
+            break;
+        }
+
+        /* Capture variable name. */
+        std::string currentName;
+        if (remainingInput.starts_with('(')) {
+            /* Parentheses-enclosed variable. */
+            size_t endParen = remainingInput.find(')');
+            if (endParen == std::string::npos) {
+                /* No closing parenthesis means this is an invalid variable
+                 * reference. */
+                return {makefilePath + ":" + std::to_string(inputLineno) +
+                            ": *** unterminated variable reference.  Stop.",
+                        false};
             }
-
-            /* This substring is a variable, so it will require recursive
-             * substitution. If an error happens, it is because the line where
-             * the variable definition caused it, so our new input line is where
-             * the variable is defined. */
-            size_t newInputLineno = variableLinenos[substring];
-
-            /* If this variable has been seen already, this is a loop.
-             * Otherwise, add self to seen chain. */
-            if (seenVariables.find(substring) != seenVariables.end()) {
-                std::string errorMessage =
-                    makefilePath + ":" + std::to_string(newInputLineno) +
-                    ": *** Recursive variable '" + substring +
-                    "' references itself (eventually).  Stop.";
-                return {errorMessage, false};
-            }
-            seenVariables.insert(substring);
-
-            /* Variable that requires more substitution. If variable not in
-             * map, treat the variable as an empty string in the output. */
-            auto it = subValues.find(substring);
-            if (it != subValues.end()) {
-                auto [subbedSubstring, subSuccess] = substituteVariables(
-                    subValues[substring], newInputLineno, subValues,
-                    variableLinenos, seenVariables);
-
-                if (!subSuccess) {
-                    /* Error during substitution. Preserve the error message
-                     * since it already contains lineno info closest to the
-                     * issue. */
-                    return {subbedSubstring, false};
-                } else {
-                    /* Successful substitution. */
-                    output += subbedSubstring;
-                }
-            }
-
-            /* Once substitution for this variable finishes, it goes out of
-             * scope and is not on the seen chain. */
-            seenVariables.erase(substring);
+            currentName = remainingInput.substr(1, endParen - 1);
+            remainingInput = remainingInput.substr(endParen + 1);
         } else {
-            /* Non-variable, or another status. */
-            output += substring;
+            /* Single character variable. */
+            currentName = remainingInput.substr(0, 1);
+            remainingInput = remainingInput.substr(1);
+        }
+
+        /* Capture the line where this variable is defined. This is the new
+         * lineno to blame for any error. If this variable has not been defined,
+         * its lineno will correctly be 0. */
+        size_t currentLineno = variableLinenos[currentName];
+
+        /* Discover if this variable name has been seen before. */
+        if (seenVariables.contains(currentName)) {
+            return {makefilePath + ":" + std::to_string(currentLineno) +
+                        ": *** Recursive variable '" + currentName +
+                        "' references itself (eventually).  Stop.",
+                    false};
+        }
+
+        /* Expand any variables inside this name. If the name doesn't have a
+         * value, it will be an empty string and thus correctly not be expanded.
+         */
+        std::string currentValue = subValues[currentName];
+
+        seenVariables.insert(currentName);
+        auto [expandedValue, expandSuccess] =
+            substituteVariables(currentValue, currentLineno, subValues,
+                                variableLinenos, seenVariables);
+        seenVariables.erase(currentName);
+
+        if (expandSuccess) {
+            output += expandedValue;
+        } else {
+            /* Pass up the error message. */
+            return {expandedValue, false};
         }
     }
+
     return {output, true};
 }
 

@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "exception.h"
+#include "variables.h"
 /* TODO remove LOG. */
 // #define LOG
 
@@ -48,6 +49,9 @@ class MakefileParser {
      * Isomorphic to `makefileRecipes`. */
     std::map<std::string, std::vector<size_t>> makefileRecipeLinenos;
 
+    /* Targets of the first rule in the makefile. */
+    std::vector<std::string> firstTargets;
+
     /* The value for each variable in the makefile. Excludes automatic
      * variables. */
     std::map<std::string, std::string> makefileVariableValues;
@@ -55,11 +59,6 @@ class MakefileParser {
     /* Line number where each variable was last defined in the makefile.
      * Isomorphic to `variableValues`. */
     std::map<std::string, size_t> makefileVariableLinenos;
-
-    /* Targets of the first rule in the makefile. */
-    std::vector<std::string> firstTargets;
-
-    std::vector<std::tuple<std::string, int>> getVariables(std::string input);
 
     std::tuple<std::string, bool> substituteVariables(
         const std::string input, size_t inputLineno,

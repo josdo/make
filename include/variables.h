@@ -1,3 +1,4 @@
+#include <map>
 #include <string>
 
 class Variables {
@@ -6,8 +7,9 @@ class Variables {
     void addVariable(const std::string& name, const std::string& value,
                      size_t lineno);
 
-    /* substituteVariables + getVariables together. */
     std::string expandVariables(const std::string& input, size_t lineno);
 
    private:
+    std::map<std::string, std::string> variables;
+    std::map<std::string, size_t> variableLinenos;
 };

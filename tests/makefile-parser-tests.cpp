@@ -95,20 +95,20 @@ TEST(MakefileParser, getRecipes_getPrereqs) {
 //     EXPECT_EQ(t, MakefileParser::INVALID);
 // }
 
-TEST(MakefileParser, getVariables) {
-    MakefileParser parser("tests/empty.mk");
-    auto substrings = parser.getVariables("$(A)filler$(B)filler$@$^$$$(");
-    std::vector<std::tuple<std::string, int>> correctSubstrings{
-        {"A", 1}, {"filler", 0},
-        {"B", 1}, {"filler", 0},
-        {"@", 1}, {"^", 1},
-        {"$", 1}, {"unterminated variable reference", -1}};
-    EXPECT_EQ(substrings, correctSubstrings);
+// TEST(MakefileParser, getVariables) {
+//     MakefileParser parser("tests/empty.mk");
+//     auto substrings = parser.getVariables("$(A)filler$(B)filler$@$^$$$(");
+//     std::vector<std::tuple<std::string, int>> correctSubstrings{
+//         {"A", 1}, {"filler", 0},
+//         {"B", 1}, {"filler", 0},
+//         {"@", 1}, {"^", 1},
+//         {"$", 1}, {"unterminated variable reference", -1}};
+//     EXPECT_EQ(substrings, correctSubstrings);
 
-    substrings = parser.getVariables("$");
-    correctSubstrings = {{"$", 0}};
-    EXPECT_EQ(substrings, correctSubstrings);
-}
+//     substrings = parser.getVariables("$");
+//     correctSubstrings = {{"$", 0}};
+//     EXPECT_EQ(substrings, correctSubstrings);
+// }
 
 TEST(MakefileParser, substituteVariables) {
     MakefileParser parser("tests/empty.mk");
