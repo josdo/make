@@ -60,40 +60,40 @@ TEST(MakefileParser, getRecipes_getPrereqs) {
     EXPECT_TRUE(exceptionThrown);
 }
 
-TEST(MakefileParser, identifyLineMisc) {
-    MakefileParser parser("tests/empty.mk");
-    MakefileParser::LineType t;
+// TEST(MakefileParser, identifyLineMisc) {
+//     MakefileParser parser("tests/empty.mk");
+//     MakefileParser::LineType t;
 
-    std::tie(t, std::ignore) = parser.identifyLine("\t# comment", false);
-    EXPECT_EQ(t, MakefileParser::NOOP);
-}
+//     std::tie(t, std::ignore) = parser.identifyLine("\t# comment", false);
+//     EXPECT_EQ(t, MakefileParser::NOOP);
+// }
 
-TEST(MakefileParser, identifyLineWhitespace) {
-    /* test on whitespace */
-    MakefileParser parser("tests/empty.mk");
-    MakefileParser::LineType t;
+// TEST(MakefileParser, identifyLineWhitespace) {
+//     /* test on whitespace */
+//     MakefileParser parser("tests/empty.mk");
+//     MakefileParser::LineType t;
 
-    std::tie(t, std::ignore) = parser.identifyLine("\t", true);
-    EXPECT_EQ(t, MakefileParser::NOOP);
+//     std::tie(t, std::ignore) = parser.identifyLine("\t", true);
+//     EXPECT_EQ(t, MakefileParser::NOOP);
 
-    std::tie(t, std::ignore) = parser.identifyLine(" ", false);
-    EXPECT_EQ(t, MakefileParser::NOOP);
+//     std::tie(t, std::ignore) = parser.identifyLine(" ", false);
+//     EXPECT_EQ(t, MakefileParser::NOOP);
 
-    std::tie(t, std::ignore) = parser.identifyLine("\t", false);
-    EXPECT_EQ(t, MakefileParser::NOOP);
+//     std::tie(t, std::ignore) = parser.identifyLine("\t", false);
+//     EXPECT_EQ(t, MakefileParser::NOOP);
 
-    std::tie(t, std::ignore) = parser.identifyLine("    X = 1", true);
-    EXPECT_EQ(t, MakefileParser::VARIABLE);
+//     std::tie(t, std::ignore) = parser.identifyLine("    X = 1", true);
+//     EXPECT_EQ(t, MakefileParser::VARIABLE);
 
-    std::tie(t, std::ignore) = parser.identifyLine("    X = 1", false);
-    EXPECT_EQ(t, MakefileParser::VARIABLE);
+//     std::tie(t, std::ignore) = parser.identifyLine("    X = 1", false);
+//     EXPECT_EQ(t, MakefileParser::VARIABLE);
 
-    std::tie(t, std::ignore) = parser.identifyLine("\tX = 1", true);
-    EXPECT_EQ(t, MakefileParser::RECIPE);
+//     std::tie(t, std::ignore) = parser.identifyLine("\tX = 1", true);
+//     EXPECT_EQ(t, MakefileParser::RECIPE);
 
-    std::tie(t, std::ignore) = parser.identifyLine("\tX = 1", false);
-    EXPECT_EQ(t, MakefileParser::INVALID);
-}
+//     std::tie(t, std::ignore) = parser.identifyLine("\tX = 1", false);
+//     EXPECT_EQ(t, MakefileParser::INVALID);
+// }
 
 TEST(MakefileParser, getVariables) {
     MakefileParser parser("tests/empty.mk");

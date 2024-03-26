@@ -34,22 +34,69 @@ MakefileParser::MakefileParser(std::string makefilePath)
     makefileVariableValues = {{"$", "$"}};
 
     std::string line;
-    /* TODO: merge identifyLine into this method. */
-    LineType lineType = NOOP;
     size_t lineno = 0;
+    /* The targets of the rule that is currently in scope, and if that's
+     * nonempty, the line number the rule was defined at. */
     /* TODO: group all target info together. */
-    std::vector<std::string> ruleTargets;
-    /* TODO: try to get rid of this. */
-    bool isFirstRecipe =
-        false;  // True if this is the first recipe for a given ruleTarget
+    std::vector<std::string> activeTargets;
+    size_t activeLineno = 0;
     while (std::getline(makefile, line)) {
         lineno++;
-        std::tie(lineType, line) = identifyLine(line, !ruleTargets.empty());
 
-        if (lineType == VARIABLE) {
-            /* Not in a rule any longer. */
-            ruleTargets.clear();
-            isFirstRecipe = false;
+        /* Remove comments. */
+        size_t hashPos = line.find('#');
+        if (hashPos != std::string::npos) {
+            line.erase(hashPos);
+        }
+
+        /* Identify the line type. Order matters. Tabbed whitespace should be
+         * ignored. Tabbed nonwhitespace may contain a variable or rule
+         * separator, but will be treated as a recipe. Thus, evaluation is first
+         * no-op, then recipe, then variable or rule. */
+        bool isRecipe = line.starts_with('\t');
+        size_t equalPos = line.find('=');
+        size_t colonPos = line.find(':');
+        bool isVariable = equalPos < colonPos;
+        bool isRule = colonPos < equalPos;
+        line = trim(line);
+        bool isNoOp = line.empty();
+
+        if (isNoOp) {
+            continue;
+        } else if (isRecipe) {
+            if (activeTargets.empty()) {
+                throw MakefileParserException(
+                    {makefilePath + ":" + std::to_string(lineno) + ": *** " +
+                     "recipe commences before first target" + ".  Stop."});
+            } else {
+                /* Assign each target this recipe. */
+                std::string recipe = line;
+                for (const std::string& target : activeTargets) {
+                    /* Override any recipes defined in a prior rule. */
+                    if (!makefileRecipeLinenos[target].empty() &&
+                        makefileRecipeLinenos[target].at(0) < activeLineno) {
+                        std::cerr << makefilePath << ":"
+                                  << std::to_string(lineno) << ":"
+                                  << " warning: overriding recipe for target '"
+                                  << target << "'" << '\n';
+                        std::cerr
+                            << makefilePath << ":"
+                            << std::to_string(
+                                   makefileRecipeLinenos[target].at(0))
+                            << ":"
+                            << " warning: ignoring old recipe for target '"
+                            << target << "'" << '\n';
+                        makefileRecipes.clear();
+                        makefileRecipeLinenos.clear();
+                    }
+
+                    makefileRecipes[target].push_back(recipe);
+                    makefileRecipeLinenos[target].push_back(lineno);
+                }
+            }
+        } else if (isVariable) {
+            /* Indicate no longer in a rule. */
+            activeTargets.clear();
 
             /* Resolve variable name. Strip off whitespace for consistency. */
             size_t equalPos = line.find('=');
@@ -66,7 +113,7 @@ MakefileParser::MakefileParser(std::string makefilePath)
             }
             varName = trim(varName);
 
-            /* Disallow empty variable name. */
+            /* Disallow an empty variable name. */
             if (varName.empty()) {
                 throw MakefileParserException(
                     {makefilePath + ":" + std::to_string(lineno) + ": *** " +
@@ -77,13 +124,7 @@ MakefileParser::MakefileParser(std::string makefilePath)
             std::string varValue = trim(line.substr(equalPos + 1));
             makefileVariableValues[varName] = varValue;
             makefileVariableLinenos[varName] = lineno;
-
-        } else if (lineType == RULE) {
-            /* Clear old rule. Indicate next recipe will be the first of this
-             * rule. */
-            ruleTargets.clear();
-            isFirstRecipe = true;
-
+        } else if (isRule) {
             /* Resolve rule definition. Resolve targets and prereqs separately
              * since cannot guarantee where the colon will end up after
              * resolution or whether a target name will contain a colon. */
@@ -109,9 +150,11 @@ MakefileParser::MakefileParser(std::string makefilePath)
                 throw MakefileParserException({prereqString});
             }
 
-            /* Disallow no targets. */
-            ruleTargets = split(targetString, ' ');
-            if (ruleTargets.empty()) {
+            activeTargets = split(targetString, ' ');
+            activeLineno = lineno;
+
+            /* Disallow an empty set of targets. */
+            if (activeTargets.empty()) {
                 throw MakefileParserException(
                     {makefilePath + ":" + std::to_string(lineno) + ": *** " +
                      "missing target" + ".  Stop."});
@@ -121,130 +164,32 @@ MakefileParser::MakefileParser(std::string makefilePath)
              * the new rule context. */
             std::vector<std::string> newPrereqs = split(prereqString, ' ');
 
-            for (const std::string& target : ruleTargets) {
-                auto keyValue = makefilePrereqs.find(target);
-                if (keyValue == makefilePrereqs.end()) {
-                    /* Target doesn't have prereqs yet. Create a new
-                     * mapping. */
-                    makefilePrereqs[target] = newPrereqs;
-                } else {
-                    /* Target has prereqs, so append to it those not yet
-                     * included. TODO: write unit test for duplicates. */
-                    std::vector<std::string> existingPrereqs = keyValue->second;
-                    for (const std::string& newPrereq : newPrereqs) {
-                        if (std::find(existingPrereqs.begin(),
-                                      existingPrereqs.end(),
-                                      newPrereq) == existingPrereqs.end()) {
-                            existingPrereqs.push_back(newPrereq);
-                        }
-                    }
+            for (const std::string& target : activeTargets) {
+                for (const std::string& newPrereq : newPrereqs) {
+                    makefilePrereqs[target].push_back(newPrereq);
                 }
+
+                /* Remove any duplicate prereqs. */
+                std::sort(makefilePrereqs[target].begin(),
+                          makefilePrereqs[target].end());
+                makefilePrereqs[target].erase(
+                    std::unique(makefilePrereqs[target].begin(),
+                                makefilePrereqs[target].end()),
+                    makefilePrereqs[target].end());
             }
 
             /* If this was the first rule seen, remember its targets. */
             if (firstTargets.empty()) {
-                firstTargets = ruleTargets;
+                firstTargets = activeTargets;
             }
-
-        } else if (lineType == RECIPE) {
-            /* Assign each target this recipe. */
-            std::string recipe = trim(line);
-            assert(!recipe.empty());
-            for (const std::string& target : ruleTargets) {
-                auto keyValue = makefileRecipes.find(target);
-
-                if (keyValue != makefileRecipes.end()) {
-                    /* There already exists at least 1 recipe for this target.
-                     */
-                    if (isFirstRecipe) {
-                        /* Before this rule defined its first recipe for this
-                         * target, another rule already assigned recipes to this
-                         * target. Clear existing recipes. */
-                        std::cerr << makefilePath << ":"
-                                  << std::to_string(lineno) << ":"
-                                  << " warning: overriding recipe for target '"
-                                  << target << "'" << '\n';
-                        size_t oldFirstLineno =
-                            makefileRecipeLinenos[target].at(0);
-                        std::cerr
-                            << makefilePath << ":"
-                            << std::to_string(oldFirstLineno) << ":"
-                            << " warning: ignoring old recipe for target '"
-                            << target << "'" << '\n';
-                        makefileRecipes.clear();
-                        makefileRecipeLinenos.clear();
-                    }
-                    /* A new recipe for this target is ready to be added. */
-                    makefileRecipes[target].push_back(recipe);
-                    makefileRecipeLinenos[target].push_back(lineno);
-                } else {
-                    /* Target has zero recipes right now. */
-                    makefileRecipes[target] = {recipe};
-                    makefileRecipeLinenos[target].push_back(lineno);
-                }
-            }
-
-            /* If this was the first recipe of this rule, indicate that recipes
-             * seen next are not the first one. */
-            if (isFirstRecipe) {
-                isFirstRecipe = false;
-            }
-        } else if (lineType == INVALID) {
+        } else {
+            /* If equal and colon in the same position, they must both be npos
+             * and thus not present. */
             throw MakefileParserException({makefilePath + ":" +
                                            std::to_string(lineno) + ": *** " +
-                                           line + ".  Stop."});
+                                           "missing separator" + ".  Stop."});
         }
-
-#ifdef LOG
-        /* Print identified line. */
-        std::string lineTypeName = LineTypeNames[lineType];
-        int width = 10;
-        if (lineTypeName != "NOOP") {
-            lineTypeName = "\033[1m" + lineTypeName + "\033[0m";
-            // 4 characters for "\033[1m" and 4 characters for "\033[0m"
-            width += 8;
-        }
-        std::cout << std::setw(3) << std::right << lineno << "|"
-                  << std::setw(width) << std::right << lineTypeName << "|"
-                  << line << '\n';
-#endif
     }
-
-#ifdef LOG
-    /* Print variable mapping. */
-    // std::cout << "VARIABLES" << '\n';
-    for (const auto& [name, value] : variableValues) {
-        std::cout << std::setw(20) << std::left << "{" + name + "}"
-                  << " -> "
-                  << "{" << value << "}" << '\n';
-    }
-
-    /* Print prereq mapping. */
-    // std::cout << "PREREQS" << '\n';
-    for (const auto& [target, prereqs] : targetPrereqs) {
-        std::cout << std::setw(20) << std::left << "{" + target + "}"
-                  << " -> "
-                  << "{";
-        for (const auto& prereq : prereqs) {
-            std::cout << "\n    "
-                      << "{" + prereq + "}";
-        }
-        std::cout << "\n}\n";
-    }
-
-    /* Print recipe mapping. */
-    // std::cout << "RECIPES" << '\n';
-    for (const auto& [target, recipes] : targetRecipes) {
-        std::cout << std::setw(20) << std::left << "{" + target + "}"
-                  << " -> "
-                  << "{";
-        for (const auto& recipe : recipes) {
-            std::cout << "\n    "
-                      << "%" + recipe + "%";
-        }
-        std::cout << "\n}\n";
-    }
-#endif
 
     makefile.close();
 }
@@ -532,50 +477,6 @@ std::tuple<std::string, bool> MakefileParser::substituteVariables(
         }
     }
     return {output, true};
-}
-
-/**
- * @brief Returns the semantic type of a line and a "clean" version of it.
- *
- * @return MakefileParser::LineType
- * @return std::string If valid, this is the same line but without comments
- * or leading whitespace or tabspace. If invalid, this is the error message.
- */
-std::tuple<MakefileParser::LineType, std::string> MakefileParser::identifyLine(
-    std::string line, bool inRule) {
-    bool startsWithTab = line.starts_with('\t');
-
-    /* Remove anything from # onwards first. */
-    size_t hashPos = line.find('#');
-    if (hashPos != std::string::npos) {
-        line.erase(hashPos);
-    }
-
-    /* Remove leading whitespace or tabs. */
-    line = trim(line);
-    if (line.empty()) return {NOOP, line};
-
-    /* Look for recipe. */
-    if (startsWithTab) {
-        if (inRule) {
-            return {RECIPE, line};
-        } else {
-            return {INVALID, "recipe commences before first target"};
-        }
-    }
-
-    /* Look for a variable or rule. */
-    size_t equalPos = line.find('=');
-    size_t colonPos = line.find(':');
-    if (equalPos < colonPos) {
-        return {VARIABLE, line};
-    } else if (colonPos < equalPos) {
-        return {RULE, line};
-    } else {
-        /* If equal and colon in the same position, they must both be npos and
-         * thus not present. */
-        return {INVALID, "missing separator"};
-    }
 }
 
 /**

@@ -104,7 +104,7 @@ while True:
         failures += 1
         print("Error: expected %s\n------------------\n%s" % (source, expected),
                 end="")
-        print("------------------\nbut actual %s output was" % (source))
+        print("------------------\nbut actual %s was" % (source))
         print("------------------\n%s" % (output), end="")
         print("------------------")
 

@@ -67,19 +67,6 @@ class MakefileParser {
         std::map<std::string, size_t>& variableLinenos,
         std::set<std::string>& seenVariables);
 
-    /* Known line types. */
-    enum LineType {
-        VARIABLE = 0,
-        RULE,
-        RECIPE,
-        NOOP,
-        INVALID,
-    };
-    std::vector<std::string> LineTypeNames = {"VARIABLE", "RULE", "RECIPE",
-                                              "NOOP", "INVALID"};
-    std::tuple<MakefileParser::LineType, std::string> identifyLine(
-        std::string line, bool inRule);
-
     std::string trim(const std::string& str);
     std::vector<std::string> split(const std::string& str, char delimiter);
     bool hasLoop(std::string target, std::set<std::string>& seenTargets);
