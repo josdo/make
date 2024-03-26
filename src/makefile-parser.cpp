@@ -9,8 +9,11 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <numeric>
 #include <set>
 #include <string>
+
+#include "variables.h"
 
 /**
  * @brief Parses the makefile to find the recipes and prerequisites for every
@@ -26,12 +29,12 @@ MakefileParser::MakefileParser(std::string makefilePath)
     : makefilePath(makefilePath) {
     std::ifstream makefile(makefilePath);
     if (!makefile) {
-        throw MakefileParserException(
-            {"make: " + makefilePath + " No such file or directory"});
+        throw MakefileParserException("make: %s No such file or directory",
+                                      makefilePath.c_str());
     }
 
     /* This is our one default variable mapping. */
-    makefileVariableValues = {{"$", "$"}};
+    vars.addVariable("$", "$", 0);
 
     std::string line;
     size_t lineno = 0;
@@ -66,8 +69,8 @@ MakefileParser::MakefileParser(std::string makefilePath)
         } else if (isRecipe) {
             if (activeTargets.empty()) {
                 throw MakefileParserException(
-                    {makefilePath + ":" + std::to_string(lineno) + ": *** " +
-                     "recipe commences before first target" + ".  Stop."});
+                    "%s:%d: *** recipe commences before first target.  Stop.",
+                    makefilePath.c_str(), lineno);
             } else {
                 /* Assign each target this recipe. */
                 std::string recipe = line;
@@ -102,24 +105,24 @@ MakefileParser::MakefileParser(std::string makefilePath)
             size_t equalPos = line.find('=');
             assert(equalPos != std::string::npos);
             std::string varName = line.substr(0, equalPos);
-
-            std::set<std::string> seenVariables = {};
-            varName =
-                substituteVariables(varName, lineno, makefileVariableValues,
-                                    makefileVariableLinenos, seenVariables);
+            try {
+                varName = vars.expandVariables(varName, lineno);
+            } catch (const Variables::VariablesException& e) {
+                throw MakefileParserException("%s:%s", makefilePath.c_str(),
+                                              e.what());
+            }
             varName = trim(varName);
 
             /* Disallow an empty variable name. */
             if (varName.empty()) {
                 throw MakefileParserException(
-                    {makefilePath + ":" + std::to_string(lineno) + ": *** " +
-                     "empty variable name" + ".  Stop."});
+                    "%s:%d: *** empty variable name.  Stop.",
+                    makefilePath.c_str(), lineno);
             }
 
             /* Map variable value to the resolved name. */
             std::string varValue = trim(line.substr(equalPos + 1));
-            makefileVariableValues[varName] = varValue;
-            makefileVariableLinenos[varName] = lineno;
+            vars.addVariable(varName, varValue, lineno);
         } else if (isRule) {
             /* Resolve rule definition. Resolve targets and prereqs separately
              * since cannot guarantee where the colon will end up after
@@ -128,15 +131,15 @@ MakefileParser::MakefileParser(std::string makefilePath)
             assert(colonPos != std::string::npos);
             std::string targetString;
             std::string prereqString;
-            std::set<std::string> seenVariables = {};
-            targetString = substituteVariables(
-                line.substr(0, colonPos), lineno, makefileVariableValues,
-                makefileVariableLinenos, seenVariables);
-
-            seenVariables.clear();
-            prereqString = substituteVariables(
-                line.substr(colonPos + 1), lineno, makefileVariableValues,
-                makefileVariableLinenos, seenVariables);
+            try {
+                targetString =
+                    vars.expandVariables(line.substr(0, colonPos), lineno);
+                prereqString =
+                    vars.expandVariables(line.substr(colonPos + 1), lineno);
+            } catch (const Variables::VariablesException& e) {
+                throw MakefileParserException("%s:%s", makefilePath.c_str(),
+                                              e.what());
+            }
 
             activeTargets = split(targetString, ' ');
             activeLineno = lineno;
@@ -144,8 +147,8 @@ MakefileParser::MakefileParser(std::string makefilePath)
             /* Disallow an empty set of targets. */
             if (activeTargets.empty()) {
                 throw MakefileParserException(
-                    {makefilePath + ":" + std::to_string(lineno) + ": *** " +
-                     "missing target" + ".  Stop."});
+                    "%s:%d: *** missing target.  Stop.", makefilePath.c_str(),
+                    lineno);
             }
 
             /* Map target to all its prereqs (even empty prereqs) and store as
@@ -173,9 +176,9 @@ MakefileParser::MakefileParser(std::string makefilePath)
         } else {
             /* If equal and colon in the same position, they must both be npos
              * and thus not present. */
-            throw MakefileParserException({makefilePath + ":" +
-                                           std::to_string(lineno) + ": *** " +
-                                           "missing separator" + ".  Stop."});
+            throw MakefileParserException(
+                "%s:%d: *** missing separator.  Stop.", makefilePath.c_str(),
+                lineno);
         }
     }
 
@@ -197,30 +200,31 @@ MakefileParser::getRecipes(std::string target) {
     std::vector<size_t> linenos = makefileRecipeLinenos[target];
 
     /* Introduce automatic variables to substitution map. */
-    std::map<std::string, std::string> autovariableValues =
-        makefileVariableValues;
-    autovariableValues["@"] = target;
+    Variables autovars = vars;
+    autovars.addVariable("@", target, 0);
     std::vector<std::string> prereqs = makefilePrereqs[target];
     if (!prereqs.empty()) {
-        autovariableValues["<"] = prereqs.front();
-        for (const std::string& prereq : prereqs) {
-            if (!autovariableValues["^"].empty()) {
-                autovariableValues["^"] += " ";
-            }
-            autovariableValues["^"] += prereq;
-        }
+        autovars.addVariable("<", prereqs.front(), 0);
+        autovars.addVariable(
+            "^",
+            std::accumulate(std::next(prereqs.begin()), prereqs.end(),
+                            prereqs[0],
+                            [](const std::string& a, const std::string& b) {
+                                return a + " " + b;
+                            }),
+            0);
     }
 
-    /* Substitute recipes with variables. */
+    /* Expand variables in each recipe. */
     for (size_t i = 0; i < originalRecipes.size(); i++) {
-        std::set<std::string> seen;
         std::string subbedRecipe;
-        /* TODO: Information leakage. There are no line numbers for autovariable
-         * linenos, but there's also no variables nested in their variable
-         * value, so their linenos will not be used and this is safe. */
-        subbedRecipe = substituteVariables(originalRecipes.at(i), linenos.at(i),
-                                           autovariableValues,
-                                           makefileVariableLinenos, seen);
+        try {
+            subbedRecipe =
+                autovars.expandVariables(originalRecipes.at(i), linenos.at(i));
+        } catch (const Variables::VariablesException& e) {
+            throw MakefileParserException("%s:%s", makefilePath.c_str(),
+                                          e.what());
+        }
         subbedRecipes.push_back(subbedRecipe);
     }
 
@@ -235,7 +239,7 @@ std::vector<std::string> MakefileParser::getPrereqs(std::string target) {
     auto it = makefilePrereqs.find(target);
     if (it == makefilePrereqs.end()) {
         throw MakefileParserException(
-            {"make: *** No rule to make target '" + target + "'. Stop."});
+            "make: *** No rule to make target '%s'. Stop.", target.c_str());
     }
     std::vector<std::string> prereqs = makefilePrereqs[target];
 
@@ -243,16 +247,16 @@ std::vector<std::string> MakefileParser::getPrereqs(std::string target) {
     for (const std::string& prereq : prereqs) {
         if (makefilePrereqs.find(prereq) == makefilePrereqs.end()) {
             throw MakefileParserException(
-                {"make: *** No rule to make target '" + prereq +
-                 "', needed by '" + target + "'. Stop."});
+                "make: *** No rule to make target '%s', needed by '%s'. Stop.",
+                prereq.c_str(), target.c_str());
         }
     }
 
     /* Throw error if any circular dependency. */
     std::set<std::string> visitedTargets;
     if (hasLoop(target, visitedTargets)) {
-        throw MakefileParserException(
-            {"Circular dependency for target " + target});
+        throw MakefileParserException("Circular dependency for target %s",
+                                      target.c_str());
     }
 
     return prereqs;
@@ -328,88 +332,6 @@ std::vector<std::string> MakefileParser::getFirstTargets() {
  * unterminated variable reference. If -1, the substring is the error
  * message.
  */
-
-/**
- * @brief Substitute each variable in the input string with its value if
- * defined in the map, or otherwise with an empty string. Any variable found
- * inside another variable's value is substituted recursively. Preserves
- * whitespace.
- *
- * @param subValues Variable names mapped to values that can be use in
- * substitution.
- * @return bool True if success. False if failure.
- * @return std::string The substituted input if success. The error message
- * if failure.
- */
-std::string MakefileParser::substituteVariables(
-    std::string input, size_t inputLineno,
-    std::map<std::string, std::string>& subValues,
-    std::map<std::string, size_t>& variableLinenos,
-    std::set<std::string>& seenVariables) {
-    std::string output = "";
-    std::string remainingInput = input;
-    while (!remainingInput.empty()) {
-        /* Go to the next variable. */
-        size_t dollarPos = remainingInput.find('$');
-        output += remainingInput.substr(0, dollarPos);
-        if (dollarPos == std::string::npos) {
-            /* The entire input has been went through. */
-            break;
-        }
-
-        /* Handle $ at the end of a line. */
-        remainingInput = remainingInput.substr(dollarPos + 1);
-        if (remainingInput.empty()) {
-            output += "$";
-            break;
-        }
-
-        /* Capture variable name. */
-        std::string currentName;
-        if (remainingInput.starts_with('(')) {
-            /* Parentheses-enclosed variable. */
-            size_t endParen = remainingInput.find(')');
-            if (endParen == std::string::npos) {
-                /* No closing parenthesis means this is an invalid variable
-                 * reference. */
-                throw MakefileParserException(
-                    {makefilePath + ":" + std::to_string(inputLineno) +
-                     ": *** unterminated variable reference.  Stop."});
-            }
-            currentName = remainingInput.substr(1, endParen - 1);
-            remainingInput = remainingInput.substr(endParen + 1);
-        } else {
-            /* Single character variable. */
-            currentName = remainingInput.substr(0, 1);
-            remainingInput = remainingInput.substr(1);
-        }
-
-        /* Capture the line where this variable is defined. This is the new
-         * lineno to blame for any error. If this variable has not been defined,
-         * its lineno will correctly be 0. */
-        size_t currentLineno = variableLinenos[currentName];
-
-        /* Discover if this variable name has been seen before. */
-        if (seenVariables.contains(currentName)) {
-            throw MakefileParserException(
-                {makefilePath + ":" + std::to_string(currentLineno) +
-                 ": *** Recursive variable '" + currentName +
-                 "' references itself (eventually).  Stop."});
-        }
-
-        /* Expand any variables inside this name. If the name doesn't have a
-         * value, it will be an empty string and thus correctly not be expanded.
-         */
-        std::string currentValue = subValues[currentName];
-
-        seenVariables.insert(currentName);
-        output += substituteVariables(currentValue, currentLineno, subValues,
-                                      variableLinenos, seenVariables);
-        seenVariables.erase(currentName);
-    }
-
-    return output;
-}
 
 /**
  * @brief Trim the leading and trailing whitespace and tabspace off, preserving

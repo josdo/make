@@ -110,68 +110,6 @@ TEST(MakefileParser, getRecipes_getPrereqs) {
 //     EXPECT_EQ(substrings, correctSubstrings);
 // }
 
-TEST(MakefileParser, substituteVariables) {
-    MakefileParser parser("tests/empty.mk");
-    std::map<std::string, std::string> subValues = {
-        {"A", "a"},
-        {"unterminated", "$("},
-        {"sub", "__$(A)__"},
-        {"=", "equals"},
-        {"space space", "spacespace"},
-        {"VAR5", "x$@$^$<y"},
-        {"three   space", "threespace"},
-        {"$", "$"}};
-    std::set<std::string> seen;
-    std::map<std::string, size_t> linenos;
-    std::string output = parser.substituteVariables(
-        "+++$(A)+++$(sub)+++$(space space)  $(=)", 0, subValues, linenos, seen);
-    EXPECT_EQ(output, "+++a+++__a__+++spacespace  equals");
-
-    seen.clear();
-    try {
-        output = parser.substituteVariables("$(unterminated)", 0, subValues,
-                                            linenos, seen);
-    } catch (const MakefileParser::MakefileParserException& e) {
-        EXPECT_TRUE(true);
-    } catch (...) {
-        EXPECT_TRUE(false);
-    }
-
-    seen.clear();
-    output =
-        parser.substituteVariables("$(VAR5) ", 0, subValues, linenos, seen);
-    EXPECT_EQ(output, "xy ");
-
-    seen.clear();
-    output = parser.substituteVariables("$(three   space)", 0, subValues,
-                                        linenos, seen);
-    EXPECT_EQ(output, "threespace");
-
-    seen.clear();
-    output = parser.substituteVariables("$$", 0, subValues, linenos, seen);
-    EXPECT_EQ(output, "$");
-}
-
-TEST(MakefileParser, substituteVariables_detectLoop) {
-    MakefileParser parser("tests/empty.mk");
-    std::map<std::string, std::string> subValues = {
-        {"A", "$(B)"}, {"B", "$(C)"}, {"C", "$(A)"}};
-    std::map<std::string, size_t> linenos;
-
-    std::set<std::string> seen;
-    std::string output;
-    try {
-        output =
-            parser.substituteVariables("$(A)", 0, subValues, linenos, seen);
-    } catch (const MakefileParser::MakefileParserException& e) {
-        EXPECT_TRUE(true);
-        std::cout << "correctly threw error (should be Recursive variable): "
-                  << e.what() << '\n';
-    } catch (...) {
-        EXPECT_TRUE(false);
-    }
-}
-
 TEST(MakefileParser, trim) {
     MakefileParser parser("tests/empty.mk");
     EXPECT_EQ(parser.trim("   a  b c  "), "a  b c");

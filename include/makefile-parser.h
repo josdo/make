@@ -24,12 +24,11 @@ class MakefileParser {
 
     class MakefileParserException : public PrintfException {
        public:
-        MakefileParserException(std::vector<std::string> v)
-            : PrintfException(v.at(0).c_str()) {}
-        /* TODO: cleanly print exceptions. */
-        // MakefileParserException(const char* format, ...)
-        //     : PrintfException(format, std::forward<decltype(format)>(format))
-        //     {}
+        MakefileParserException(const char* format, ...) : PrintfException() {
+            va_list ap;
+            va_start(ap, format);
+            set_msg(format, ap);
+        }
     };
 
     PRIVATE
@@ -52,19 +51,7 @@ class MakefileParser {
     /* Targets of the first rule in the makefile. */
     std::vector<std::string> firstTargets;
 
-    /* The value for each variable in the makefile. Excludes automatic
-     * variables. */
-    std::map<std::string, std::string> makefileVariableValues;
-
-    /* Line number where each variable was last defined in the makefile.
-     * Isomorphic to `variableValues`. */
-    std::map<std::string, size_t> makefileVariableLinenos;
-
-    std::string substituteVariables(
-        const std::string input, size_t inputLineno,
-        std::map<std::string, std::string>& subValues,
-        std::map<std::string, size_t>& variableLinenos,
-        std::set<std::string>& seenVariables);
+    Variables vars;
 
     std::string trim(const std::string& str);
     std::vector<std::string> split(const std::string& str, char delimiter);

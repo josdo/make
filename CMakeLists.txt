@@ -21,6 +21,7 @@ set(SRCS
     src/makefile-parser.cpp
     src/task-graph.cpp
 	src/makefile-builder.cpp
+	src/variables.cpp
 )
 
 # Executable
