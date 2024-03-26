@@ -60,18 +60,6 @@ TEST(MakefileParser, getRecipes_getPrereqs) {
     EXPECT_TRUE(exceptionThrown);
 }
 
-TEST(MakefileParser, trim) {
-    MakefileParser parser("tests/empty.mk");
-    EXPECT_EQ(parser.trim("   a  b c  "), "a  b c");
-    EXPECT_EQ(parser.trim("  "), "");
-}
-
-TEST(MakefileParser, split) {
-    MakefileParser parser("tests/empty.mk");
-    EXPECT_EQ(parser.split("  a   b      c    ", ' '),
-              std::vector<std::string>({"a", "b", "c"}));
-}
-
 TEST(MakefileParser, hasCircularDependency) {
     MakefileParser parser("tests/empty.mk");
     std::string target = "t";

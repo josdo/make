@@ -8,6 +8,19 @@ void Variables::addVariable(const std::string& name, const std::string& value,
 }
 
 /**
+ * @brief Splits the string by $() or $. Returns each substring and if it
+ * was a variable. Does not handle nesting, e.g. $($()). Preserves
+ * whitespace.
+ * TODO: rename method, it does formatting too.
+ *
+ * $<space> will return as "" and $<EOL> will return as "$".
+ *
+ * @return std::vector<std::tuple<std::string, bool>> Each element is a
+ * substring and 0 if not a variable, 1 if a variable, or -1 if an
+ * unterminated variable reference. If -1, the substring is the error
+ * message.
+ */
+/**
  * @brief Substitute each variable in the input string with its value if
  * defined in the map, or otherwise with an empty string. Any variable found
  * inside another variable's value is substituted recursively. Preserves

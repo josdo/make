@@ -14,6 +14,7 @@
 #include <set>
 #include <string>
 
+#include "string-ops.h"
 #include "variables.h"
 
 /**
@@ -35,7 +36,7 @@ MakefileParser::MakefileParser(std::string makefilePath)
     }
 
     /* This is our one default variable mapping. */
-    vars.addVariable("$", "$", 0);
+    makefileVars.addVariable("$", "$", 0);
 
     std::string line;
     size_t lineno = 0;
@@ -62,7 +63,7 @@ MakefileParser::MakefileParser(std::string makefilePath)
         size_t colonPos = line.find(':');
         bool isVariable = equalPos < colonPos;
         bool isRule = colonPos < equalPos;
-        line = trim(line);
+        line = StringOps::trim(line);
         bool isNoOp = line.empty();
 
         if (isNoOp) {
@@ -107,12 +108,12 @@ MakefileParser::MakefileParser(std::string makefilePath)
             assert(equalPos != std::string::npos);
             std::string varName = line.substr(0, equalPos);
             try {
-                varName = vars.expandVariables(varName, lineno);
+                varName = makefileVars.expandVariables(varName, lineno);
             } catch (const Variables::VariablesException& e) {
                 throw MakefileParserException("%s:%s", makefilePath.c_str(),
                                               e.what());
             }
-            varName = trim(varName);
+            varName = StringOps::trim(varName);
 
             /* Disallow an empty variable name. */
             if (varName.empty()) {
@@ -122,8 +123,8 @@ MakefileParser::MakefileParser(std::string makefilePath)
             }
 
             /* Map variable value to the resolved name. */
-            std::string varValue = trim(line.substr(equalPos + 1));
-            vars.addVariable(varName, varValue, lineno);
+            std::string varValue = StringOps::trim(line.substr(equalPos + 1));
+            makefileVars.addVariable(varName, varValue, lineno);
         } else if (isRule) {
             /* Resolve rule definition. Resolve targets and prereqs separately
              * since cannot guarantee where the colon will end up after
@@ -133,16 +134,16 @@ MakefileParser::MakefileParser(std::string makefilePath)
             std::string targetString;
             std::string prereqString;
             try {
-                targetString =
-                    vars.expandVariables(line.substr(0, colonPos), lineno);
-                prereqString =
-                    vars.expandVariables(line.substr(colonPos + 1), lineno);
+                targetString = makefileVars.expandVariables(
+                    line.substr(0, colonPos), lineno);
+                prereqString = makefileVars.expandVariables(
+                    line.substr(colonPos + 1), lineno);
             } catch (const Variables::VariablesException& e) {
                 throw MakefileParserException("%s:%s", makefilePath.c_str(),
                                               e.what());
             }
 
-            activeTargets = split(targetString, ' ');
+            activeTargets = StringOps::split(targetString, ' ');
             activeLineno = lineno;
 
             /* Disallow an empty set of targets. */
@@ -154,7 +155,8 @@ MakefileParser::MakefileParser(std::string makefilePath)
 
             /* Map target to all its prereqs (even empty prereqs) and store as
              * the new rule context. */
-            std::vector<std::string> newPrereqs = split(prereqString, ' ');
+            std::vector<std::string> newPrereqs =
+                StringOps::split(prereqString, ' ');
 
             for (const std::string& target : activeTargets) {
                 for (const std::string& newPrereq : newPrereqs) {
@@ -201,7 +203,7 @@ MakefileParser::getRecipes(std::string target) {
     std::vector<size_t> linenos = makefileRecipeLinenos[target];
 
     /* Introduce automatic variables to substitution map. */
-    Variables autovars = vars;
+    Variables autovars = makefileVars;
     autovars.addVariable("@", target, 0);
     std::vector<std::string> prereqs = makefilePrereqs[target];
     if (!prereqs.empty()) {
@@ -317,51 +319,6 @@ bool MakefileParser::outdated(std::string target) {
  */
 std::vector<std::string> MakefileParser::getFirstTargets() {
     return firstTargets;
-}
-
-/**
- * @brief Splits the string by $() or $. Returns each substring and if it
- * was a variable. Does not handle nesting, e.g. $($()). Preserves
- * whitespace.
- * TODO: rename method, it does formatting too.
- *
- * $<space> will return as "" and $<EOL> will return as "$".
- *
- * @return std::vector<std::tuple<std::string, bool>> Each element is a
- * substring and 0 if not a variable, 1 if a variable, or -1 if an
- * unterminated variable reference. If -1, the substring is the error
- * message.
- */
-
-/**
- * @brief Trim the leading and trailing whitespace and tabspace off, preserving
- * any whitespace in between.
- *
- */
-std::string MakefileParser::trim(const std::string& str) {
-    size_t first = str.find_first_not_of(" \t");
-    if (std::string::npos == first) {
-        /* Entire string is whitespace. */
-        return "";
-    }
-    size_t last = str.find_last_not_of(" \t");
-    return str.substr(first, (last - first + 1));
-}
-
-/**
- * @brief Return substrings separated by any number of consecutive
- * delimiters.
- *
- */
-std::vector<std::string> MakefileParser::split(const std::string& str,
-                                               char delimiter) {
-    std::istringstream iss(str);
-    std::vector<std::string> result;
-
-    for (std::string s; std::getline(iss, s, delimiter);) {
-        if (!s.empty()) result.push_back(s);
-    }
-    return result;
 }
 
 bool MakefileParser::hasCircularDependency(std::string target) {

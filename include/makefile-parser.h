@@ -4,8 +4,6 @@
 
 #include "exception.h"
 #include "variables.h"
-/* TODO remove LOG. */
-// #define LOG
 
 /**
  * @brief Parses a makefile so target prerequisites and recipes can be queried.
@@ -50,9 +48,8 @@ class MakefileParser {
     /* Targets of the first rule in the makefile. */
     std::vector<std::string> firstTargets;
 
-    Variables vars;
+    /* Stores all variable definitions seen in the makefile. */
+    Variables makefileVars;
 
-    std::string trim(const std::string& str);
-    std::vector<std::string> split(const std::string& str, char delimiter);
     bool hasCircularDependency(std::string target);
 };

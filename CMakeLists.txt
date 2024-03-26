@@ -18,9 +18,10 @@ set(TEST_DIR "tests")
 include_directories(${INCLUDE_DIR})
 
 set(SRCS
-    src/makefile-parser.cpp
-    src/task-graph.cpp
 	src/makefile-builder.cpp
+    src/makefile-parser.cpp
+	src/string-ops.cpp
+    src/task-graph.cpp
 	src/variables.cpp
 )
 
