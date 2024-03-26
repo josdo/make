@@ -10,10 +10,8 @@
 class Variables {
    public:
     Variables(){};
-    /* Lineno 0 is a special value since they start from 1. */
     void addVariable(const std::string& name, const std::string& value,
                      size_t lineno);
-
     std::string expandVariables(const std::string& input, size_t lineno);
 
     class VariablesException : public PrintfException {
@@ -26,7 +24,10 @@ class Variables {
     };
 
     PRIVATE
+    /* The value for each variable name added. */
     std::map<std::string, std::string> variables;
+
+    /* The lineno where each added variable name was defined. */
     std::map<std::string, size_t> variableLinenos;
 
     /* Variables currently in process of being expanded in an `expandVariables`

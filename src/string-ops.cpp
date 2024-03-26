@@ -4,14 +4,13 @@
 
 namespace StringOps {
 /**
- * @brief Trim the leading and trailing whitespace and tabspace off, preserving
- * any whitespace in between.
+ * @brief Trim off all whitespaces and tabs that are leading and trailing.
  *
  */
 std::string trim(const std::string& str) {
     size_t first = str.find_first_not_of(" \t");
-    if (std::string::npos == first) {
-        /* Entire string is whitespace. */
+    bool isBlank = std::string::npos == first;
+    if (isBlank) {
         return "";
     }
     size_t last = str.find_last_not_of(" \t");
@@ -19,8 +18,8 @@ std::string trim(const std::string& str) {
 }
 
 /**
- * @brief Return substrings separated by any number of consecutive
- * delimiters.
+ * @brief Splits the string wherever the delimiter appears and returns the
+ * non-empty substrings.
  *
  */
 std::vector<std::string> split(const std::string& str, char delimiter) {

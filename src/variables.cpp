@@ -1,6 +1,10 @@
 #include "variables.h"
 
-/* Permits empty string for name or value. */
+/**
+ * @brief Store the value and lineno for the given variable name. Overwrites any
+ * previous data for the same name. No restriction on argument values.
+ *
+ */
 void Variables::addVariable(const std::string& name, const std::string& value,
                             size_t lineno) {
     variables[name] = value;
@@ -8,29 +12,15 @@ void Variables::addVariable(const std::string& name, const std::string& value,
 }
 
 /**
- * @brief Splits the string by $() or $. Returns each substring and if it
- * was a variable. Does not handle nesting, e.g. $($()). Preserves
- * whitespace.
- * TODO: rename method, it does formatting too.
+ * @brief Expands each variable reference, denoted by $( ) or $. Within the
+ * value of a variable reference, any variable reference is also recursively
+ * expanded. If a `$` is the last character of the input, it is preserved and
+ * not treated as a variable reference.
  *
- * $<space> will return as "" and $<EOL> will return as "$".
+ * Throws an error if a variable reference has an opening but no closing
+ * parenthesis or if any referenced variable is defined in terms of itself
+ * during expansion.
  *
- * @return std::vector<std::tuple<std::string, bool>> Each element is a
- * substring and 0 if not a variable, 1 if a variable, or -1 if an
- * unterminated variable reference. If -1, the substring is the error
- * message.
- */
-/**
- * @brief Substitute each variable in the input string with its value if
- * defined in the map, or otherwise with an empty string. Any variable found
- * inside another variable's value is substituted recursively. Preserves
- * whitespace.
- *
- * @param subValues Variable names mapped to values that can be use in
- * substitution.
- * @return bool True if success. False if failure.
- * @return std::string The substituted input if success. The error message
- * if failure.
  */
 std::string Variables::expandVariables(const std::string& input,
                                        size_t lineno) {
