@@ -60,7 +60,7 @@ class MakefileParser {
      * Isomorphic to `variableValues`. */
     std::map<std::string, size_t> makefileVariableLinenos;
 
-    std::tuple<std::string, bool> substituteVariables(
+    std::string substituteVariables(
         const std::string input, size_t inputLineno,
         std::map<std::string, std::string>& subValues,
         std::map<std::string, size_t>& variableLinenos,

@@ -123,32 +123,32 @@ TEST(MakefileParser, substituteVariables) {
         {"$", "$"}};
     std::set<std::string> seen;
     std::map<std::string, size_t> linenos;
-    auto [output, success] = parser.substituteVariables(
+    std::string output = parser.substituteVariables(
         "+++$(A)+++$(sub)+++$(space space)  $(=)", 0, subValues, linenos, seen);
-    EXPECT_TRUE(success);
     EXPECT_EQ(output, "+++a+++__a__+++spacespace  equals");
 
     seen.clear();
-    std::tie(output, success) = parser.substituteVariables(
-        "$(unterminated)", 0, subValues, linenos, seen);
-    EXPECT_FALSE(false);
+    try {
+        output = parser.substituteVariables("$(unterminated)", 0, subValues,
+                                            linenos, seen);
+    } catch (const MakefileParser::MakefileParserException& e) {
+        EXPECT_TRUE(true);
+    } catch (...) {
+        EXPECT_TRUE(false);
+    }
 
     seen.clear();
-    std::tie(output, success) =
+    output =
         parser.substituteVariables("$(VAR5) ", 0, subValues, linenos, seen);
-    EXPECT_TRUE(success);
     EXPECT_EQ(output, "xy ");
 
     seen.clear();
-    std::tie(output, success) = parser.substituteVariables(
-        "$(three   space)", 0, subValues, linenos, seen);
-    EXPECT_TRUE(success);
+    output = parser.substituteVariables("$(three   space)", 0, subValues,
+                                        linenos, seen);
     EXPECT_EQ(output, "threespace");
 
     seen.clear();
-    std::tie(output, success) =
-        parser.substituteVariables("$$", 0, subValues, linenos, seen);
-    EXPECT_TRUE(success);
+    output = parser.substituteVariables("$$", 0, subValues, linenos, seen);
     EXPECT_EQ(output, "$");
 }
 
@@ -159,12 +159,17 @@ TEST(MakefileParser, substituteVariables_detectLoop) {
     std::map<std::string, size_t> linenos;
 
     std::set<std::string> seen;
-    auto [output, success] =
-        parser.substituteVariables("$(A)", 0, subValues, linenos, seen);
-
-    EXPECT_FALSE(success);
-    std::cout << "correctly returned error (should be Recursive variable): "
-              << output << '\n';
+    std::string output;
+    try {
+        output =
+            parser.substituteVariables("$(A)", 0, subValues, linenos, seen);
+    } catch (const MakefileParser::MakefileParserException& e) {
+        EXPECT_TRUE(true);
+        std::cout << "correctly threw error (should be Recursive variable): "
+                  << e.what() << '\n';
+    } catch (...) {
+        EXPECT_TRUE(false);
+    }
 }
 
 TEST(MakefileParser, trim) {

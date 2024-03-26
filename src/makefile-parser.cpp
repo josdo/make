@@ -103,14 +103,10 @@ MakefileParser::MakefileParser(std::string makefilePath)
             assert(equalPos != std::string::npos);
             std::string varName = line.substr(0, equalPos);
 
-            bool success;
             std::set<std::string> seenVariables = {};
-            std::tie(varName, success) =
+            varName =
                 substituteVariables(varName, lineno, makefileVariableValues,
                                     makefileVariableLinenos, seenVariables);
-            if (!success) {
-                throw MakefileParserException({varName});
-            }
             varName = trim(varName);
 
             /* Disallow an empty variable name. */
@@ -132,23 +128,15 @@ MakefileParser::MakefileParser(std::string makefilePath)
             assert(colonPos != std::string::npos);
             std::string targetString;
             std::string prereqString;
-            bool targetSuccess = false;
-            bool prereqSuccess = false;
             std::set<std::string> seenVariables = {};
-            std::tie(targetString, targetSuccess) = substituteVariables(
+            targetString = substituteVariables(
                 line.substr(0, colonPos), lineno, makefileVariableValues,
                 makefileVariableLinenos, seenVariables);
-            if (!targetSuccess) {
-                throw MakefileParserException({targetString});
-            }
 
             seenVariables.clear();
-            std::tie(prereqString, prereqSuccess) = substituteVariables(
+            prereqString = substituteVariables(
                 line.substr(colonPos + 1), lineno, makefileVariableValues,
                 makefileVariableLinenos, seenVariables);
-            if (!prereqSuccess) {
-                throw MakefileParserException({prereqString});
-            }
 
             activeTargets = split(targetString, ' ');
             activeLineno = lineno;
@@ -227,16 +215,12 @@ MakefileParser::getRecipes(std::string target) {
     for (size_t i = 0; i < originalRecipes.size(); i++) {
         std::set<std::string> seen;
         std::string subbedRecipe;
-        bool success = false;
         /* TODO: Information leakage. There are no line numbers for autovariable
          * linenos, but there's also no variables nested in their variable
          * value, so their linenos will not be used and this is safe. */
-        std::tie(subbedRecipe, success) = substituteVariables(
-            originalRecipes.at(i), linenos.at(i), autovariableValues,
-            makefileVariableLinenos, seen);
-        if (!success) {
-            throw MakefileParserException({subbedRecipe});
-        }
+        subbedRecipe = substituteVariables(originalRecipes.at(i), linenos.at(i),
+                                           autovariableValues,
+                                           makefileVariableLinenos, seen);
         subbedRecipes.push_back(subbedRecipe);
     }
 
@@ -357,7 +341,7 @@ std::vector<std::string> MakefileParser::getFirstTargets() {
  * @return std::string The substituted input if success. The error message
  * if failure.
  */
-std::tuple<std::string, bool> MakefileParser::substituteVariables(
+std::string MakefileParser::substituteVariables(
     std::string input, size_t inputLineno,
     std::map<std::string, std::string>& subValues,
     std::map<std::string, size_t>& variableLinenos,
@@ -388,9 +372,9 @@ std::tuple<std::string, bool> MakefileParser::substituteVariables(
             if (endParen == std::string::npos) {
                 /* No closing parenthesis means this is an invalid variable
                  * reference. */
-                return {makefilePath + ":" + std::to_string(inputLineno) +
-                            ": *** unterminated variable reference.  Stop.",
-                        false};
+                throw MakefileParserException(
+                    {makefilePath + ":" + std::to_string(inputLineno) +
+                     ": *** unterminated variable reference.  Stop."});
             }
             currentName = remainingInput.substr(1, endParen - 1);
             remainingInput = remainingInput.substr(endParen + 1);
@@ -407,10 +391,10 @@ std::tuple<std::string, bool> MakefileParser::substituteVariables(
 
         /* Discover if this variable name has been seen before. */
         if (seenVariables.contains(currentName)) {
-            return {makefilePath + ":" + std::to_string(currentLineno) +
-                        ": *** Recursive variable '" + currentName +
-                        "' references itself (eventually).  Stop.",
-                    false};
+            throw MakefileParserException(
+                {makefilePath + ":" + std::to_string(currentLineno) +
+                 ": *** Recursive variable '" + currentName +
+                 "' references itself (eventually).  Stop."});
         }
 
         /* Expand any variables inside this name. If the name doesn't have a
@@ -419,20 +403,12 @@ std::tuple<std::string, bool> MakefileParser::substituteVariables(
         std::string currentValue = subValues[currentName];
 
         seenVariables.insert(currentName);
-        auto [expandedValue, expandSuccess] =
-            substituteVariables(currentValue, currentLineno, subValues,
-                                variableLinenos, seenVariables);
+        output += substituteVariables(currentValue, currentLineno, subValues,
+                                      variableLinenos, seenVariables);
         seenVariables.erase(currentName);
-
-        if (expandSuccess) {
-            output += expandedValue;
-        } else {
-            /* Pass up the error message. */
-            return {expandedValue, false};
-        }
     }
 
-    return {output, true};
+    return output;
 }
 
 /**
