@@ -13,9 +13,17 @@
 
 namespace MakefileBuilder {
 
+/**
+ * @brief Builds the given targets using the rules defined in the makefile.
+ * Returns early and outputs an error message to std::cerr if there is incorrect
+ * make syntax or bash exits with an error during a build. For efficiency,
+ * builds targets concurrently wherever possible up to the number of jobs
+ * allowed.
+ *
+ */
 void build(const std::string& makefilePath, std::vector<std::string> targets,
            const size_t numJobs) {
-    /* Parse. Catch any error and print with formatting. */
+    /* Parse. */
     std::shared_ptr<MakefileParser> parser;
     try {
         parser = std::make_shared<MakefileParser>(makefilePath);
@@ -24,21 +32,20 @@ void build(const std::string& makefilePath, std::vector<std::string> targets,
         return;
     }
 
-    /* Use first rule's targets if none were given. */
+    /* Build the first-defined rule if no targets given. */
     if (targets.empty()) {
         targets = parser->getFirstTargets();
     }
 
-    /* Create task tree for each target. */
     for (const std::string& currTarget : targets) {
-        /* Create tasks. */
+        /* Turn this target into a DAG of tasks. */
         std::deque<std::string> taskify = {currTarget};
         std::vector<TaskGraph::Task> tasks;
         while (!taskify.empty()) {
-            /* Turn this into a task. */
             TaskGraph::Task task{.task = taskify.front()};
             taskify.pop_front();
 
+            /* Lookup the recipes. */
             std::vector<std::string> recipes;
             std::vector<size_t> recipeLinenos;
             try {
@@ -50,9 +57,10 @@ void build(const std::string& makefilePath, std::vector<std::string> targets,
                 return;
             }
 
+            /* Create the recipe-running function. */
             task.runTask = [parser, currTarget, recipes, recipeLinenos,
                             makefilePath](const std::string& target) {
-                /* Skip running if target is up to date. */
+                /* Don't run if the target is up to date. */
                 if (!parser->outdated(target)) {
                     if (currTarget == target) {
                         std::cout << "make: '" + target + "' is up to date.\n";
@@ -75,10 +83,12 @@ void build(const std::string& makefilePath, std::vector<std::string> targets,
                         } else {
                             std::cout << recipe << '\n';
                         }
+
                         /* Run recipe in child process. */
                         const char* argv[] = {"bash", "-c", recipe.c_str(),
                                               NULL};
                         execvp(argv[0], const_cast<char* const*>(argv));
+
                         /* Execvp only returns if an error occurred. */
                         perror("execvp failed");
                         return false;
@@ -105,12 +115,13 @@ void build(const std::string& makefilePath, std::vector<std::string> targets,
 
             tasks.push_back(task);
 
-            /* Taskify prerequisites next. */
+            /* Turn the prerequisites into tasks next. */
             taskify.insert(taskify.end(), task.parentTasks.begin(),
                            task.parentTasks.end());
         }
 
-        /* Run build tasks. If failure, do not continue to the next target. */
+        /* Run the tasks to build this target. If one target fails, do not build
+         * any remaining targets. */
         bool success = TaskGraph::run(tasks, numJobs);
         if (!success) {
             return;

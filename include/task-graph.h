@@ -2,17 +2,17 @@
 #include <string>
 #include <vector>
 
+/**
+ * @brief An algorithm that concurrently executes tasks with a directed
+ * acyclic dependency graph.
+ *
+ */
 namespace TaskGraph {
 struct Task {
-    /* If a duplicate task given, the latter task will be ignored. */
-    std::string task{};
-    /* If a parent task does not exist, it is skipped. */
-    /* If a circular dependency exists, it will be detected while running as
-     * a stall. */
-    std::vector<std::string> parentTasks{};
-    /* True means success. False means failure. Must be thread safe. */
-    std::function<bool(std::string)> runTask{};
+    std::string task{};                     /* Name of this task. */
+    std::vector<std::string> parentTasks{}; /* Tasks that this depends on. */
+    std::function<bool(std::string)> runTask{}; /* False if failed. */
 };
 
-bool run(std::vector<Task> tasks, int numThreads);
+bool run(const std::vector<Task>& tasks, int maxThreads);
 }  // namespace TaskGraph

@@ -7,6 +7,10 @@
 
 #include "exception.h"
 
+/**
+ * @brief Stores all variables so it can expand variable references.
+ *
+ */
 class Variables {
    public:
     Variables(){};

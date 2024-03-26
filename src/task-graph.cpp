@@ -11,14 +11,18 @@
 namespace TaskGraph {
 
 /**
- * @brief Run each task after its parents. Independent tasks will be run
- * concurrently.
+ * @brief Runs each task when all its parents have run and returned true. If a
+ * task has a parent that is not defined, this parent is ignored. If a task is
+ * defined a second time, the second definition is ignored. Independent tasks
+ * are run concurrently.
  *
- * @return true Every task ran and returned with success.
- * @return false Some tasks could not run due to circular dependency, or a task
- * ran but returned failure.
+ * @param tasks All tasks in the dependency graph.
+ * @param maxThreads Max number of tasks that can be run concurrently.
+ * @return true Every task ran and returned true.
+ * @return false Tasks could not run due to circular dependency, or a task that
+ * ran returned false.
  */
-bool run(std::vector<Task> tasks, int numThreads) {
+bool run(const std::vector<Task>& tasks, int maxThreads) {
     /* SCHEDULE TASKS. */
     /* For each task, this stores the number of parent tasks that still need to
      * be run before it can be run. */
@@ -78,7 +82,7 @@ bool run(std::vector<Task> tasks, int numThreads) {
 
     /* Acquired when launching each task and released when the task completes.
      * An acquire blocks until a thread is available to do another task. */
-    std::counting_semaphore taskLimiter(numThreads);
+    std::counting_semaphore taskLimiter(maxThreads);
 
     while (true) {
         /* There are tasks ready to run. Launch the next ready task in a new
