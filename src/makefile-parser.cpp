@@ -10,6 +10,7 @@
 #include <iomanip>
 #include <iostream>
 #include <numeric>
+#include <queue>
 #include <set>
 #include <string>
 
@@ -253,8 +254,7 @@ std::vector<std::string> MakefileParser::getPrereqs(std::string target) {
     }
 
     /* Throw error if any circular dependency. */
-    std::set<std::string> visitedTargets;
-    if (hasLoop(target, visitedTargets)) {
+    if (hasCircularDependency(target)) {
         throw MakefileParserException("Circular dependency for target %s",
                                       target.c_str());
     }
@@ -364,33 +364,37 @@ std::vector<std::string> MakefileParser::split(const std::string& str,
     return result;
 }
 
-bool MakefileParser::hasLoop(std::string target,
-                             std::set<std::string>& visitedTargets) {
-    /* Indicate this target is visited. */
-    visitedTargets.insert(target);
+bool MakefileParser::hasCircularDependency(std::string target) {
+    std::set<std::string> visitedTargets;
+    std::queue<std::string> queue;
 
-    /* Lookup its prereqs. If a target does not exist, it is treated like a
-     * target with no prereqs. */
-    std::vector<std::string> prereqs = {};
-    if (makefilePrereqs.find(target) != makefilePrereqs.end()) {
-        prereqs = makefilePrereqs[target];
-    }
+    queue.push(target);
 
-    for (const std::string& visitor : prereqs) {
-        /* See if we visited this prereq as a target already. If so, this is
-         * a loop. */
-        if (visitedTargets.find(visitor) != visitedTargets.end()) {
-            return true;
+    while (!queue.empty()) {
+        std::string currentTarget = queue.front();
+        queue.pop();
+
+        /* Indicate this target is visited. */
+        visitedTargets.insert(currentTarget);
+
+        /* Lookup its prereqs. If a target does not exist, it is treated like a
+         * target with no prereqs. */
+        std::vector<std::string> prereqs = {};
+        if (makefilePrereqs.find(currentTarget) != makefilePrereqs.end()) {
+            prereqs = makefilePrereqs[currentTarget];
         }
 
-        /* Visit prereqs of this prereq. */
-        if (hasLoop(visitor, visitedTargets)) {
-            return true;
+        for (const std::string& visitor : prereqs) {
+            /* See if we visited this prereq as a target already. If so, this is
+             * a loop. */
+            if (visitedTargets.find(visitor) != visitedTargets.end()) {
+                return true;
+            }
+
+            /* Add prereqs of this prereq to the queue. */
+            queue.push(visitor);
         }
     }
-
-    /* Forget this target was visited. */
-    visitedTargets.erase(target);
 
     return false;
 }

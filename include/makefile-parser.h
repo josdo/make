@@ -1,5 +1,4 @@
 #include <map>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -55,5 +54,5 @@ class MakefileParser {
 
     std::string trim(const std::string& str);
     std::vector<std::string> split(const std::string& str, char delimiter);
-    bool hasLoop(std::string target, std::set<std::string>& seenTargets);
+    bool hasCircularDependency(std::string target);
 };

@@ -60,56 +60,6 @@ TEST(MakefileParser, getRecipes_getPrereqs) {
     EXPECT_TRUE(exceptionThrown);
 }
 
-// TEST(MakefileParser, identifyLineMisc) {
-//     MakefileParser parser("tests/empty.mk");
-//     MakefileParser::LineType t;
-
-//     std::tie(t, std::ignore) = parser.identifyLine("\t# comment", false);
-//     EXPECT_EQ(t, MakefileParser::NOOP);
-// }
-
-// TEST(MakefileParser, identifyLineWhitespace) {
-//     /* test on whitespace */
-//     MakefileParser parser("tests/empty.mk");
-//     MakefileParser::LineType t;
-
-//     std::tie(t, std::ignore) = parser.identifyLine("\t", true);
-//     EXPECT_EQ(t, MakefileParser::NOOP);
-
-//     std::tie(t, std::ignore) = parser.identifyLine(" ", false);
-//     EXPECT_EQ(t, MakefileParser::NOOP);
-
-//     std::tie(t, std::ignore) = parser.identifyLine("\t", false);
-//     EXPECT_EQ(t, MakefileParser::NOOP);
-
-//     std::tie(t, std::ignore) = parser.identifyLine("    X = 1", true);
-//     EXPECT_EQ(t, MakefileParser::VARIABLE);
-
-//     std::tie(t, std::ignore) = parser.identifyLine("    X = 1", false);
-//     EXPECT_EQ(t, MakefileParser::VARIABLE);
-
-//     std::tie(t, std::ignore) = parser.identifyLine("\tX = 1", true);
-//     EXPECT_EQ(t, MakefileParser::RECIPE);
-
-//     std::tie(t, std::ignore) = parser.identifyLine("\tX = 1", false);
-//     EXPECT_EQ(t, MakefileParser::INVALID);
-// }
-
-// TEST(MakefileParser, getVariables) {
-//     MakefileParser parser("tests/empty.mk");
-//     auto substrings = parser.getVariables("$(A)filler$(B)filler$@$^$$$(");
-//     std::vector<std::tuple<std::string, int>> correctSubstrings{
-//         {"A", 1}, {"filler", 0},
-//         {"B", 1}, {"filler", 0},
-//         {"@", 1}, {"^", 1},
-//         {"$", 1}, {"unterminated variable reference", -1}};
-//     EXPECT_EQ(substrings, correctSubstrings);
-
-//     substrings = parser.getVariables("$");
-//     correctSubstrings = {{"$", 0}};
-//     EXPECT_EQ(substrings, correctSubstrings);
-// }
-
 TEST(MakefileParser, trim) {
     MakefileParser parser("tests/empty.mk");
     EXPECT_EQ(parser.trim("   a  b c  "), "a  b c");
@@ -122,19 +72,17 @@ TEST(MakefileParser, split) {
               std::vector<std::string>({"a", "b", "c"}));
 }
 
-TEST(MakefileParser, hasLoop) {
+TEST(MakefileParser, hasCircularDependency) {
     MakefileParser parser("tests/empty.mk");
     std::string target = "t";
     std::vector<std::string> prereqs = {"p1", "p2", "p2"};
     parser.makefilePrereqs = {
         {target, prereqs}, {"p1", {}}, {"p2", {"p3"}}, {"p3", {}}};
 
-    std::set<std::string> visited;
-    EXPECT_FALSE(parser.hasLoop(target, visited));
+    EXPECT_FALSE(parser.hasCircularDependency(target));
 
     parser.makefilePrereqs["p3"] = {"p2"};
-    visited.clear();
-    EXPECT_TRUE(parser.hasLoop(target, visited));
+    EXPECT_TRUE(parser.hasCircularDependency(target));
 }
 
 TEST(MakefileParser, outdated) {
